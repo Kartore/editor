@@ -1,5 +1,7 @@
-# @kartore/editor を npm に publish する (tag `v*` の push で実行)。
-# npm の trusted publishing (OIDC) で認証し、provenance を付ける。トークンは使わない
+# @kartore/editor を npm に stage publish する (tag `v*` の push で実行)。
+# npm の trusted publishing (OIDC) で認証し、provenance を付ける。トークンは使わない。
+# trusted publisher は stage publish だけを許可しているので、公開はメンテナが npmjs.com の Approve
+# (または `npm stage approve <id>`) で 2FA をして行う
 name: Publish to npm
 
 on:
@@ -38,8 +40,6 @@ jobs:
           pnpm test
           pnpm build
 
-      # npm (11.5+) の trusted publishing で publish する。prepare で kartore() プリセットをビルドし直す
-      - name: Publish
-        run: |
-          npm --version
-          npm publish --access public --provenance --loglevel verbose
+      # npm 11.15+ の stage publish。prepare で kartore() プリセットをビルドし直す
+      - name: Stage publish
+        run: npm stage publish --access public --provenance
