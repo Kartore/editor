@@ -27,8 +27,12 @@ export default createCloudflareHandler(); // KV binding 'KARTORE_KV' by default
 ```jsonc
 // wrangler.jsonc
 "main": "./worker.ts",
-"assets": { "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"] }
+"assets": { "binding": "ASSETS", "not_found_handling": "none", "run_worker_first": ["/api/*"] }
 ```
+
+Paths without a file reach the Worker, which answers `index.html` for the editor and adapter pages and 404 for
+missing build assets (`/assets/…`, e.g. chunks referenced by an HTML page from before a deploy). With
+`not_found_handling: "single-page-application"` those missing chunks get `index.html` and the page stays blank.
 
 `index.html` only needs a `<head>` (charset, viewport, favicon, title); `kartore()` injects the editor entry.
 
@@ -62,14 +66,15 @@ The build output is not nested: `dist/client` holds `index.html` and `assets/`, 
 ```jsonc
 // wrangler.jsonc (Cloudflare): serve dist/client under /studio/, run the worker only for the APIs
 "assets": {
+	"binding": "ASSETS",
 	"base_path": "/studio/",
-	"not_found_handling": "single-page-application", // /studio/<anything> without a file → /studio/index.html
+	"not_found_handling": "none", // the worker answers /studio/index.html for pages, 404 for /studio/assets/…
 	"run_worker_first": ["/studio/api/*"]
 }
 ```
 
-On Node, `startNodeServer` serves `clientDir` under the base, falls back to `index.html` inside the base, redirects
-`/studio` to `/studio/` and answers 404 outside it. Kartore's cookies are scoped to the base (`kartore_session`:
+On Node, `startNodeServer` serves `clientDir` under the base, falls back to `index.html` inside the base (404 for
+missing `/studio/assets/…`), redirects `/studio` to `/studio/` and answers 404 outside it. Kartore's cookies are scoped to the base (`kartore_session`:
 `/studio/`); localStorage (`kartore:*`) and IndexedDB (`kartore-drafts`, `kartore-fonts`) are per origin, so other apps
 on the same origin must not use those names. The playground runs this setup with `pnpm dev:studio` / `build:studio` /
 `dev:node:studio` / `build:node:studio`.

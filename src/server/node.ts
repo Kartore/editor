@@ -6,7 +6,7 @@ import { serve, type Server, type ServerMiddleware, type ServerRequest } from 's
 import { staticMiddleware } from 'srvx/static';
 
 import { stripBase } from '../utils/basePath.ts';
-import { withPathname } from './core.ts';
+import { spaFallbackKind, withPathname } from './core.ts';
 import { base, findMissingEnv, handleKartoreRequest } from './index.ts';
 import { memoryKv } from './kv.ts';
 import { createRuntimeBase, type KartoreKv, type RuntimeFactory } from './runtime.ts';
@@ -81,7 +81,8 @@ const staticUnderBase = (dir: string, base: string): ServerMiddleware => {
 /**
  * Node の本番サーバー (srvx)。静的ファイル → <base>api/* → SPA fallback (index.html) の順に処理する。
  * clientDir は vite build の client 出力そのもの (base があっても入れ子にしない)。`<base>` の下に見せ、
- * base の外は 404、base の末尾の `/` を除いたもの (`/studio`) は `<base>` へリダイレクトする
+ * base の外と、見つからないアセット (`<base>assets/…`) は 404、base の末尾の `/` を除いたもの (`/studio`) は
+ * `<base>` へリダイレクトする
  *
  * ```ts
  * // server.node.ts
@@ -121,8 +122,10 @@ export const startNodeServer = ({
 			if (base !== '/' && url.pathname === base.slice(0, -1)) {
 				return Response.redirect(new URL(`${base}${url.search}`, url), 308);
 			}
-			if (stripBase(url.pathname, base) === null) return new Response('Not found', { status: 404 });
-			// SPA fallback (Workers の not_found_handling: single-page-application 相当)
+			// SPA fallback。消えたアセット (<base>assets/…) と base の外は 404
+			if (spaFallbackKind(url.pathname, base) !== 'index') {
+				return new Response('Not found', { status: 404 });
+			}
 			return new Response(indexHtml, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 		}
 	});

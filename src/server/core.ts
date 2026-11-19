@@ -40,6 +40,22 @@ export const csrfForbiddenResponse = (request: Request): Response => {
 };
 
 /**
+ * API 以外のリクエストに SPA としてどう応えるか。
+ * - `index`: index.html を返す (エディタ・アダプタのページ)
+ * - `not-found`: 404 (ビルドのアセット `<base>assets/…`。古い HTML が指す消えたアセットに HTML を返すと、
+ *   ブラウザは JavaScript として読もうとして失敗し、画面が白くなる)
+ * - `outside`: base の外 (404)
+ */
+export const spaFallbackKind = (
+	pathname: string,
+	base: string
+): 'index' | 'not-found' | 'outside' => {
+	const path = stripBase(pathname, base);
+	if (path === null) return 'outside';
+	return path.startsWith('/assets/') ? 'not-found' : 'index';
+};
+
+/**
  * URL から base を取った Request を作り直す。メソッド・ヘッダ・本文 (stream のまま)・signal・redirect を引き継ぐ
  * (`new Request(url, request)` は Node (undici) で本文つきだと duplex が要るため、明示して渡す)
  */

@@ -1,3 +1,4 @@
+import { spaFallbackKind } from './core.ts';
 import { base, handleKartoreRequest } from './index.ts';
 import { createRuntimeBase, stringEnv, type KartoreKv } from './runtime.ts';
 
@@ -8,10 +9,17 @@ type CloudflareKvNamespace = {
 	delete(key: string): Promise<void>;
 };
 type CloudflareExecutionContext = { waitUntil(promise: Promise<unknown>): void };
+type CloudflareAssetsBinding = { fetch(request: Request | string | URL): Promise<Response> };
 
 export type CloudflareHandlerOptions = {
 	/** KartoreKv に使う KV binding 名 (既定 'KARTORE_KV')。binding が無ければ KV を使った時点でエラー */
 	kvBinding?: string;
+	/**
+	 * SPA fallback に使う assets binding 名 (既定 'ASSETS')。wrangler.jsonc の assets に `binding` を書き、
+	 * `not_found_handling: "none"` にすると、ファイルの無いパスがこの Worker に来るので、
+	 * エディタ・アダプタのページには index.html を、消えたアセット (`<base>assets/…`) には 404 を返す
+	 */
+	assetsBinding?: string;
 };
 
 export type KartoreCloudflareHandler = {
@@ -20,6 +28,34 @@ export type KartoreCloudflareHandler = {
 		env: Record<string, unknown>,
 		ctx: CloudflareExecutionContext
 	): Promise<Response>;
+};
+
+const isAssetsBinding = (value: unknown): value is CloudflareAssetsBinding =>
+	typeof value === 'object' &&
+	value !== null &&
+	typeof (value as CloudflareAssetsBinding).fetch === 'function';
+
+/**
+ * API 以外でこの Worker に来たリクエスト (assets にファイルが無いパス) に応える。
+ * GET / HEAD のエディタ・アダプタのページは `<base>` (index.html) を返し、それ以外は 404
+ */
+const spaFallback = async (
+	request: Request,
+	assets: CloudflareAssetsBinding | null
+): Promise<Response> => {
+	const url = new URL(request.url);
+	if (
+		assets &&
+		(request.method === 'GET' || request.method === 'HEAD') &&
+		spaFallbackKind(url.pathname, base) === 'index'
+	) {
+		// `<base>index.html` は html_handling で `<base>` へリダイレクトされるので、base そのものを取る
+		const index = await assets.fetch(new Request(new URL(base, url), { headers: request.headers }));
+		if (index.ok) {
+			return new Response(request.method === 'HEAD' ? null : index.body, index);
+		}
+	}
+	return new Response('Not found', { status: 404 });
 };
 
 const isKvNamespace = (value: unknown): value is CloudflareKvNamespace =>
@@ -52,10 +88,12 @@ const missingKv = (binding: string): KartoreKv => {
 };
 
 /**
- * Workers のエントリ。wrangler.jsonc の assets で `run_worker_first: ["<base>api/*"]` にし、
- * 静的ファイルと SPA fallback は assets に任せる前提。
+ * Workers のエントリ。wrangler.jsonc の assets で `run_worker_first: ["<base>api/*"]` にし、静的ファイルは assets に任せる。
+ * ファイルの無いパスは、`not_found_handling: "none"` と assets の `binding` ("ASSETS") で、この Worker が受ける:
+ * エディタ・アダプタのページには index.html、消えたアセット (`<base>assets/…`。デプロイ前の古い HTML が指すもの) には 404。
+ * (`not_found_handling: "single-page-application"` のままでも動くが、消えたアセットに index.html が返り、画面が白くなる)
  * kartore({ base: '/studio/' }) なら assets に `base_path: "/studio/"` と `run_worker_first: ["/studio/api/*"]` を書く
- * (base_path で、ビルドの出力 (dist/client) が `/studio/` の下に見え、SPA fallback も `/studio/` の下だけで効く)
+ * (base_path で、ビルドの出力 (dist/client) が `/studio/` の下に見える)
  *
  * ```ts
  * // worker.ts
@@ -65,14 +103,16 @@ const missingKv = (binding: string): KartoreKv => {
  * ```jsonc
  * // wrangler.jsonc
  * "assets": {
+ *   "binding": "ASSETS",
  *   "base_path": "/studio/",
- *   "not_found_handling": "single-page-application",
+ *   "not_found_handling": "none",
  *   "run_worker_first": ["/studio/api/*"]
  * }
  * ```
  */
 export const createCloudflareHandler = ({
-	kvBinding = 'KARTORE_KV'
+	kvBinding = 'KARTORE_KV',
+	assetsBinding = 'ASSETS'
 }: CloudflareHandlerOptions = {}): KartoreCloudflareHandler => ({
 	async fetch(request, env, ctx) {
 		const binding = env[kvBinding];
@@ -89,7 +129,9 @@ export const createCloudflareHandler = ({
 				base
 			})
 		);
-		// <base>api/* 以外は run_worker_first の対象外なので、assets に無いパス (base の外) だけが来る
-		return response ?? new Response('Not found', { status: 404 });
+		if (response) return response;
+		// <base>api/* 以外は run_worker_first の対象外なので、assets にファイルの無いパスだけが来る
+		const assets = env[assetsBinding];
+		return spaFallback(request, isAssetsBinding(assets) ? assets : null);
 	}
 });

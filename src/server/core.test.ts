@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { dispatchKartoreRequest, isCsrfForbidden } from './core.ts';
+import { dispatchKartoreRequest, isCsrfForbidden, spaFallbackKind } from './core.ts';
 import { memoryKv } from './kv.ts';
 import { createRuntimeBase, type AdapterApiHandler, type RuntimeFactory } from './runtime.ts';
 
@@ -27,6 +27,25 @@ const runtimeFactory =
 
 const dispatch = (request: Request, env?: Record<string, string | undefined>) =>
 	dispatchKartoreRequest(request, runtimeFactory(env), [echoHandler]);
+
+describe('spaFallbackKind', () => {
+	it('serves index.html for the editor and adapter pages', () => {
+		expect(spaFallbackKind('/', '/')).toBe('index');
+		expect(spaFallbackKind('/github/diff', '/')).toBe('index');
+		expect(spaFallbackKind('/studio/', '/studio/')).toBe('index');
+		expect(spaFallbackKind('/studio/github/preview', '/studio/')).toBe('index');
+	});
+
+	it('answers 404 for missing build assets instead of HTML', () => {
+		expect(spaFallbackKind('/assets/index-old.js', '/')).toBe('not-found');
+		expect(spaFallbackKind('/studio/assets/index-old.js', '/studio/')).toBe('not-found');
+	});
+
+	it('answers 404 outside the base', () => {
+		expect(spaFallbackKind('/github/diff', '/studio/')).toBe('outside');
+		expect(spaFallbackKind('/assets/x.js', '/studio/')).toBe('outside');
+	});
+});
 
 describe('dispatchKartoreRequest', () => {
 	it('returns null outside /api/', async () => {
