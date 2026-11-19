@@ -2,10 +2,12 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { serve, type Server } from 'srvx';
+import { serve, type Server, type ServerMiddleware, type ServerRequest } from 'srvx';
 import { staticMiddleware } from 'srvx/static';
 
-import { findMissingEnv, handleKartoreRequest } from './index.ts';
+import { stripBase } from '../utils/basePath.ts';
+import { withPathname } from './core.ts';
+import { base, findMissingEnv, handleKartoreRequest } from './index.ts';
 import { memoryKv } from './kv.ts';
 import { createRuntimeBase, type KartoreKv, type RuntimeFactory } from './runtime.ts';
 
@@ -44,7 +46,15 @@ export const createNodeRuntimeFactory = (
 	waitUntil: (promise: Promise<unknown>) => void
 ): RuntimeFactory => {
 	return (request, handler) =>
-		createRuntimeBase({ request, env, kv, waitUntil, platform: 'node', handlerId: handler.id });
+		createRuntimeBase({
+			request,
+			env,
+			kv,
+			waitUntil,
+			platform: 'node',
+			handlerId: handler.id,
+			base
+		});
 };
 
 export const warnMissingEnv = (env: Record<string, string | undefined>): void => {
@@ -54,7 +64,24 @@ export const warnMissingEnv = (env: Record<string, string | undefined>): void =>
 };
 
 /**
- * Node の本番サーバー (srvx)。静的ファイル → /api/* → SPA fallback (index.html) の順に処理する
+ * clientDir の中身を `<base>` の下に見せる静的配信 (Workers の assets の base_path 相当)。
+ * base の外と base そのもの (`/studio`) は次へ回す
+ */
+const staticUnderBase = (dir: string, base: string): ServerMiddleware => {
+	const serveStatic = staticMiddleware({ dir });
+	if (base === '/') return serveStatic;
+	return (request, next) => {
+		const { pathname } = new URL(request.url);
+		const path = stripBase(pathname, base);
+		if (path === null || !pathname.startsWith(base)) return next();
+		return serveStatic(withPathname(request, path) as ServerRequest, next);
+	};
+};
+
+/**
+ * Node の本番サーバー (srvx)。静的ファイル → <base>api/* → SPA fallback (index.html) の順に処理する。
+ * clientDir は vite build の client 出力そのもの (base があっても入れ子にしない)。`<base>` の下に見せ、
+ * base の外は 404、base の末尾の `/` を除いたもの (`/studio`) は `<base>` へリダイレクトする
  *
  * ```ts
  * // server.node.ts
@@ -86,10 +113,15 @@ export const startNodeServer = ({
 		hostname,
 		// SIGTERM / SIGINT で未完了の waitUntil を含め最大 10 秒待つ
 		gracefulShutdown: { gracefulTimeout: 10 },
-		middleware: [staticMiddleware({ dir })],
+		middleware: [staticUnderBase(dir, base)],
 		async fetch(request) {
 			const response = await handleKartoreRequest(request, createRuntime);
 			if (response) return response;
+			const url = new URL(request.url);
+			if (base !== '/' && url.pathname === base.slice(0, -1)) {
+				return Response.redirect(new URL(`${base}${url.search}`, url), 308);
+			}
+			if (stripBase(url.pathname, base) === null) return new Response('Not found', { status: 404 });
 			// SPA fallback (Workers の not_found_handling: single-page-application 相当)
 			return new Response(indexHtml, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 		}

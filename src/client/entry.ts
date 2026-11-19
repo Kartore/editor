@@ -1,5 +1,5 @@
 import { mount } from 'svelte';
-import { appVersion } from 'virtual:kartore-app';
+import { appVersion, base } from 'virtual:kartore-app';
 import storageConfig from 'virtual:kartore-storage';
 
 import App from './App.svelte';
@@ -15,4 +15,4 @@ document.body.append(target);
 const scopeOption = storageConfig?.scope;
 const scope = typeof scopeOption === 'function' ? await scopeOption() : (scopeOption ?? null);
 
-mount(App, { target, props: { appVersion, storage: storageConfig?.storage, scope } });
+mount(App, { target, props: { appVersion, base, storage: storageConfig?.storage, scope } });

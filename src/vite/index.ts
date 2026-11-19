@@ -6,6 +6,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/vite';
 import type { Plugin, PluginOption, ViteDevServer } from 'vite';
 
+import { normalizeBase } from '../utils/basePath.ts';
 import { kartoreAdapters, type KartoreAdapterVitePlugin } from './adapters.ts';
 
 export { adapterContractVersion, type KartoreAdapterVitePlugin } from './adapters.ts';
@@ -51,6 +52,13 @@ export type KartoreOptions = {
 	 * 省略時は今までと同じ保存先 (スコープ無し)
 	 */
 	storage?: string;
+	/**
+	 * ホストの中で Kartore を置くパス。`/` で始まり `/` で終わる (例 `'/studio/'`。末尾の `/` は補う)。省略時は `'/'`。
+	 * Vite の `base` にも同じ値が入り、エディタは `<base>`、アダプタのページは `<base><module id>/<page path>`、
+	 * API は `<base>api/<id>/…` になる (アダプタのハンドラには base を取った `/api/<id>/…` が届く)。
+	 * Cloudflare では wrangler.jsonc の assets に `base_path: '<base>'` と `run_worker_first: ['<base>api/*']` を書くこと
+	 */
+	base?: string;
 };
 
 // SvelteKit 前提のモジュールは editor の上では動かない。アダプタが import していたら分かる形で止める
@@ -69,15 +77,23 @@ const forbidSvelteKitPlugin = (): Plugin => ({
 	}
 });
 
-const appInfoPlugin = (storage: string | undefined): Plugin => {
+const appInfoPlugin = (storage: string | undefined, base: string): Plugin => {
 	let appVersion = '0.0.0';
 	let root = process.cwd();
 	return {
 		name: 'kartore-app-info',
-		config() {
-			// editor とアダプタで共有するライブラリはホスト root の 1 系統に寄せる
-			// (pnpm link 時、editor 側の node_modules から別インスタンスが解決されるのを防ぐ)
+		config(userConfig) {
+			// base は kartore({ base }) で渡す。Vite の base を別の値で直接書かれると、ページ・API・アセットの位置がずれる
+			if (userConfig.base !== undefined && userConfig.base !== base) {
+				throw new Error(
+					`[kartore] Vite's base (${JSON.stringify(userConfig.base)}) differs from kartore({ base }) (${JSON.stringify(base)}). ` +
+						'Set the path only through kartore({ base }).'
+				);
+			}
 			return {
+				base,
+				// editor とアダプタで共有するライブラリはホスト root の 1 系統に寄せる
+				// (pnpm link 時、editor 側の node_modules から別インスタンスが解決されるのを防ぐ)
 				resolve: {
 					dedupe: ['svelte', 'bits-ui', '@tanstack/svelte-query', 'phosphor-svelte', 'maplibre-gl']
 				}
@@ -104,7 +120,10 @@ const appInfoPlugin = (storage: string | undefined): Plugin => {
 		},
 		load(id) {
 			if (id === '\0' + appInfoId)
-				return `export const appVersion = ${JSON.stringify(appVersion)};`;
+				return [
+					`export const appVersion = ${JSON.stringify(appVersion)};`,
+					`export const base = ${JSON.stringify(base)};`
+				].join('\n');
 			if (id === '\0' + storageConfigId)
 				return storage
 					? `export { default } from ${JSON.stringify(path.resolve(root, storage))};`
@@ -128,8 +147,8 @@ type ServerCoreModule = {
 	handleKartoreRequest(request: Request, createRuntime: RuntimeFactory): Promise<Response | null>;
 };
 
-// runtime: 'node' の dev: /api/* を Vite のミドルウェアで受け、本番と同じ nodeConfig から runtime を作る
-const nodeDevApiPlugin = (nodeConfig: string | undefined): Plugin => ({
+// runtime: 'node' の dev: <base>api/* を Vite のミドルウェアで受け、本番と同じ nodeConfig から runtime を作る
+const nodeDevApiPlugin = (nodeConfig: string | undefined, base: string): Plugin => ({
 	name: 'kartore-node-dev-api',
 	apply: 'serve',
 	async configureServer(server: ViteDevServer) {
@@ -160,8 +179,10 @@ const nodeDevApiPlugin = (nodeConfig: string | undefined): Plugin => ({
 			const { handle } = await (ready ??= setup());
 			return (await handle(request)) ?? new Response('Not found', { status: 404 });
 		});
+		// Vite の base の処理 (base を取る・base の外を 404 にする) より前に足すので、req.url は base つきのまま
+		const apiPrefix = `${base}api/`;
 		server.middlewares.use((req, res, next) => {
-			if (!req.url?.startsWith('/api/')) return next();
+			if (!req.url?.startsWith(apiPrefix)) return next();
 			// srvx の NodeHttpHandler は http / http2 両対応の交差型を取るため、Connect の req / res を渡すには型を潰す
 			void handler(req as never, res as never);
 		});
@@ -265,6 +286,8 @@ const nodeBuildPlugin = (nodeServer: string, outDir: string): Plugin => ({
  * plugins: [kartore({ adapters: [fileAdapter()], runtime: 'cloudflare' }), cloudflare()]
  * // Node
  * plugins: [kartore({ adapters: [fileAdapter()], runtime: 'node', nodeConfig: './kartore.node.ts', nodeServer: './server.node.ts' })]
+ * // ホストのサブパスに置く
+ * plugins: [kartore({ adapters: [fileAdapter()], runtime: 'cloudflare', base: '/studio/' }), cloudflare()]
  * ```
  */
 export const kartore = ({
@@ -273,25 +296,31 @@ export const kartore = ({
 	nodeConfig,
 	nodeServer,
 	nodeOutDir = 'dist',
-	storage
-}: KartoreOptions): PluginOption[] => [
-	forbidSvelteKitPlugin(),
-	appInfoPlugin(storage),
-	clientChunksPlugin(),
-	// kartoreAdapters() (Tailwind @source 注入を含む) は tailwindcss() より前
-	...kartoreAdapters(adapters),
-	tailwindcss(),
-	svelte({
-		compilerOptions: {
-			// @kartore/* と @kartore-internal/* は source 配布なので runes を強制する。他の node_modules は推論に任せる
-			runes: ({ filename }) => {
-				const parts = filename.split(/[/\\]/);
-				if (!parts.includes('node_modules')) return true;
-				return parts.includes('@kartore') || parts.includes('@kartore-internal') ? true : undefined;
-			},
-			experimental: { async: true }
-		}
-	}),
-	runtime === 'node' ? nodeDevApiPlugin(nodeConfig) : null,
-	runtime === 'node' && nodeServer ? nodeBuildPlugin(nodeServer, nodeOutDir) : null
-];
+	storage,
+	base: rawBase
+}: KartoreOptions): PluginOption[] => {
+	const base = normalizeBase(rawBase);
+	return [
+		forbidSvelteKitPlugin(),
+		appInfoPlugin(storage, base),
+		clientChunksPlugin(),
+		// kartoreAdapters() (Tailwind @source 注入を含む) は tailwindcss() より前
+		...kartoreAdapters(adapters),
+		tailwindcss(),
+		svelte({
+			compilerOptions: {
+				// @kartore/* と @kartore-internal/* は source 配布なので runes を強制する。他の node_modules は推論に任せる
+				runes: ({ filename }) => {
+					const parts = filename.split(/[/\\]/);
+					if (!parts.includes('node_modules')) return true;
+					return parts.includes('@kartore') || parts.includes('@kartore-internal')
+						? true
+						: undefined;
+				},
+				experimental: { async: true }
+			}
+		}),
+		runtime === 'node' ? nodeDevApiPlugin(nodeConfig, base) : null,
+		runtime === 'node' && nodeServer ? nodeBuildPlugin(nodeServer, nodeOutDir) : null
+	];
+};

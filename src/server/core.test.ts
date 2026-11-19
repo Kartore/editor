@@ -58,6 +58,98 @@ describe('dispatchKartoreRequest', () => {
 		errorSpy.mockRestore();
 	});
 
+	describe('base', () => {
+		const pathHandler: AdapterApiHandler = {
+			id: 'echo',
+			fetch: async (request, runtime) =>
+				Response.json({
+					method: request.method,
+					path: new URL(request.url).pathname,
+					search: new URL(request.url).search,
+					contentType: request.headers.get('content-type'),
+					body: request.body ? await request.text() : null,
+					aborted: request.signal.aborted,
+					base: runtime.base,
+					callback: runtime.url('/api/echo/auth/callback'),
+					page: runtime.url('echo/preview')
+				})
+		};
+		const factory: RuntimeFactory = (request, handler) =>
+			createRuntimeBase({
+				request,
+				env: {},
+				kv: memoryKv(),
+				waitUntil: () => {},
+				platform: 'test',
+				handlerId: handler.id,
+				base: '/studio/'
+			});
+		const dispatchUnder = (request: Request) =>
+			dispatchKartoreRequest(request, factory, [pathHandler], '/studio/');
+
+		it('passes <base>api/<id>/... to the adapter as /api/<id>/...', async () => {
+			const response = await dispatchUnder(new Request(`${origin}/studio/api/echo/me?x=1`));
+			expect(await response?.json()).toEqual({
+				method: 'GET',
+				path: '/api/echo/me',
+				search: '?x=1',
+				contentType: null,
+				body: null,
+				aborted: false,
+				base: '/studio/',
+				callback: `${origin}/studio/api/echo/auth/callback`,
+				page: `${origin}/studio/echo/preview`
+			});
+		});
+
+		it('keeps the method, headers and body when rewriting the URL', async () => {
+			const response = await dispatchUnder(
+				new Request(`${origin}/studio/api/echo/save`, {
+					method: 'PUT',
+					headers: { origin, 'content-type': 'application/json' },
+					body: '{"a":1}'
+				})
+			);
+			expect(await response?.json()).toMatchObject({
+				method: 'PUT',
+				path: '/api/echo/save',
+				contentType: 'application/json',
+				body: '{"a":1}'
+			});
+		});
+
+		it('keeps the abort signal', async () => {
+			const controller = new AbortController();
+			let seen: AbortSignal | null = null;
+			await dispatchKartoreRequest(
+				new Request(`${origin}/studio/api/echo/me`, { signal: controller.signal }),
+				factory,
+				[{ id: 'echo', fetch: (request) => ((seen = request.signal), new Response('ok')) }],
+				'/studio/'
+			);
+			controller.abort();
+			expect(seen!.aborted).toBe(true);
+		});
+
+		it('ignores paths outside the base, including the root /api/', async () => {
+			expect(await dispatchUnder(new Request(`${origin}/api/echo/me`))).toBeNull();
+			expect(await dispatchUnder(new Request(`${origin}/studio/echo/preview`))).toBeNull();
+			expect(await dispatchUnder(new Request(`${origin}/studio-x/api/echo/me`))).toBeNull();
+			expect(await dispatchUnder(new Request(`${origin}/studio/`))).toBeNull();
+		});
+
+		it('returns 404 for an unknown handler under the base', async () => {
+			expect((await dispatchUnder(new Request(`${origin}/studio/api/nope/x`)))?.status).toBe(404);
+		});
+
+		it('defaults runtime.base to / and builds URLs from the root', () => {
+			const runtime = runtimeFactory()(new Request(`${origin}/api/echo/me`), echoHandler);
+			expect(runtime.base).toBe('/');
+			expect(runtime.url('/api/echo/auth/callback')).toBe(`${origin}/api/echo/auth/callback`);
+			expect(runtime.url()).toBe(`${origin}/`);
+		});
+	});
+
 	describe('CSRF', () => {
 		const post = (headers: Record<string, string>, body?: string) =>
 			new Request(`${origin}/api/echo/action`, { method: 'POST', headers, body });

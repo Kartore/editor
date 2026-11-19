@@ -2,6 +2,7 @@
  * アダプタのサーバー契約 v2。ランタイム (Cloudflare / Node …) に依存しない。
  * アダプタはここの型を `import type { … } from '@kartore/editor/server'` で使う
  */
+// このファイルはアダプタの tsc からも型の入口として読まれるので、他のモジュールを import しない (.ts つき import が通らない)
 
 /** ランタイムがアダプタに渡すもの。Cloudflare の env / ExecutionContext の代わり */
 export type KartoreRuntime = {
@@ -15,6 +16,17 @@ export type KartoreRuntime = {
 	readonly origin: string;
 	/** origin が https か。cookie の secure 属性に使う */
 	readonly secure: boolean;
+	/**
+	 * ホストの中で Kartore を置くパス (kartore({ base }))。先頭と末尾に `/` がつく (例 '/studio/')。既定 '/'。
+	 * handler に届く request の URL からは取り除かれている (`<base>api/<id>/…` → `/api/<id>/…`)。
+	 * cookie の path などに使う
+	 */
+	readonly base: string;
+	/**
+	 * 外向きの絶対 URL (`origin` + `base` + path)。path は base からのパスで、先頭の `/` は任意。
+	 * `url('/api/github/auth/callback')` → 'https://example.com/studio/api/github/auth/callback'
+	 */
+	url(path?: string): string;
 	/** 実行中のランタイム名。分岐は最小限にすること */
 	readonly platform: 'cloudflare' | 'node' | (string & {});
 };
@@ -33,7 +45,7 @@ export type KartoreKv = {
 };
 
 export type AdapterApiHandler = {
-	/** `/api/<id>/...` の id。マニフェストの名前空間と一致させる */
+	/** `<base>api/<id>/...` の id。マニフェストの名前空間と一致させる */
 	id: string;
 	/** 必須の env キー。欠けていれば handler を呼ばずに 500 `{ error: 'missing_env', keys }` */
 	requiredEnv?: readonly string[];
@@ -88,7 +100,8 @@ export const createRuntimeBase = ({
 	kv,
 	waitUntil,
 	platform,
-	handlerId
+	handlerId,
+	base = '/'
 }: {
 	request: Request;
 	env: Readonly<Record<string, string | undefined>>;
@@ -96,6 +109,8 @@ export const createRuntimeBase = ({
 	waitUntil: (promise: Promise<unknown>) => void;
 	platform: KartoreRuntime['platform'];
 	handlerId: string;
+	/** kartore({ base }) の正規形。既定 '/' */
+	base?: string;
 }): KartoreRuntime => {
 	const { origin, secure } = resolvePublicOrigin(request, env);
 	return {
@@ -104,6 +119,8 @@ export const createRuntimeBase = ({
 		waitUntil,
 		origin,
 		secure,
+		base,
+		url: (path = '') => `${origin}${base}${path.replace(/^\/+/, '')}`,
 		platform
 	};
 };

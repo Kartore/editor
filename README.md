@@ -50,12 +50,37 @@ Behind a reverse proxy set `PUBLIC_ORIGIN` (used for `runtime.origin`, secure co
 
 See `playground/` for a host with both entries (`pnpm dev` / `dev:node` / `build` / `build:node` / `start:node`).
 
+### Sub path (`base`)
+
+To share a host with another app, put Kartore under a path: `kartore({ ..., base: '/studio/' })` (default `'/'`).
+The editor is served at `/studio/`, adapter pages at `/studio/<module id>/<page path>` and APIs at `/studio/api/<id>/*`.
+Vite's `base` is set to the same value (assets at `/studio/assets/…`); do not set Vite's `base` separately.
+The server core strips the base before calling an adapter, so handlers still see `/api/<id>/*`.
+
+The build output is not nested: `dist/client` holds `index.html` and `assets/`, and the runtime maps it under the base.
+
+```jsonc
+// wrangler.jsonc (Cloudflare): serve dist/client under /studio/, run the worker only for the APIs
+"assets": {
+	"base_path": "/studio/",
+	"not_found_handling": "single-page-application", // /studio/<anything> without a file → /studio/index.html
+	"run_worker_first": ["/studio/api/*"]
+}
+```
+
+On Node, `startNodeServer` serves `clientDir` under the base, falls back to `index.html` inside the base, redirects
+`/studio` to `/studio/` and answers 404 outside it. Kartore's cookies are scoped to the base (`kartore_session`:
+`/studio/`); localStorage (`kartore:*`) and IndexedDB (`kartore-drafts`, `kartore-fonts`) are per origin, so other apps
+on the same origin must not use those names. The playground runs this setup with `pnpm dev:studio` / `build:studio` /
+`dev:node:studio` / `build:node:studio`.
+
 ## Exports
 
 | Subpath                                       | Contents                                                                                                     |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `@kartore/editor/vite`                        | `kartore()` preset                                                                                           |
 | `@kartore/editor/types`                       | Types only: `EditorModule`, `EditorApi`, `KartoreRuntime`, `AdapterApiHandler`, local draft types, …         |
+| `@kartore/editor/paths`                       | Client URLs under the host base: `base`, `withBase(path)`, `apiPath(id, path)`, `pagePath(id, path)`         |
 | `@kartore/editor/server`                      | `handleKartoreRequest(request, createRuntime)` (runtime-agnostic server core), `createRuntimeBase`           |
 | `@kartore/editor/server/cloudflare` / `/node` | `createCloudflareHandler()` / `startNodeServer()`                                                            |
 | `@kartore/editor/server/kv`                   | `memoryKv()`, `sqliteKv(path)` (`node:sqlite`)                                                               |
@@ -87,7 +112,10 @@ An adapter is a manifest (`{ name, api: { kartoreAdapter: { contract: 2, clientM
 
 - `clientModule` exports `adapterModules: EditorModule[]` and `adapterProviders`
 - `serverModule` exports `adapterApiHandlers: AdapterApiHandler[]` — `{ id, requiredEnv?, optionalEnv?, fetch(request, runtime) }`,
-  served at `/api/<id>/*`. `runtime` is a `KartoreRuntime` (`env` strings, an `<id>:`-namespaced `kv`, `waitUntil`, `origin`, `secure`)
+  served at `<base>api/<id>/*` (the handler sees `/api/<id>/*`). `runtime` is a `KartoreRuntime` (`env` strings, an `<id>:`-namespaced
+  `kv`, `waitUntil`, `origin`, `secure`, `base`, and `url(path)` = `origin` + `base` + path for OAuth callbacks, links and cookie paths)
+- Adapter clients build their URLs with `@kartore/editor/paths` (`apiPath('github', '/me')` → `/studio/api/github/me`),
+  never root-absolute paths
 - Adapter pages receive the current URL as the `url` prop. SvelteKit modules (`$app/*`, `$env/*`, `@sveltejs/kit`) are a build error
 - Types come from `@kartore/editor/types` (declare `@kartore/editor` as a peer dependency)
 

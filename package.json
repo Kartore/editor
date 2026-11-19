@@ -32,6 +32,10 @@
 			"types": "./src/storage.ts",
 			"default": "./src/storage.ts"
 		},
+		"./paths": {
+			"types": "./src/paths.ts",
+			"default": "./src/paths.ts"
+		},
 		"./export": {
 			"types": "./src/export.ts",
 			"default": "./src/export.ts"

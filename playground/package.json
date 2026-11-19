@@ -7,8 +7,12 @@
 		"dev": "vite",
 		"build": "vite build",
 		"preview": "vite preview",
+		"dev:studio": "KARTORE_BASE=/studio/ vite",
+		"build:studio": "KARTORE_BASE=/studio/ vite build",
 		"dev:node": "KARTORE_TARGET=node vite",
 		"build:node": "KARTORE_TARGET=node vite build",
+		"dev:node:studio": "KARTORE_TARGET=node KARTORE_BASE=/studio/ vite",
+		"build:node:studio": "KARTORE_TARGET=node KARTORE_BASE=/studio/ vite build",
 		"start:node": "node dist-node/server/server.node.js"
 	},
 	"devDependencies": {

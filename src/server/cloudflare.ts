@@ -1,4 +1,4 @@
-import { handleKartoreRequest } from './index.ts';
+import { base, handleKartoreRequest } from './index.ts';
 import { createRuntimeBase, stringEnv, type KartoreKv } from './runtime.ts';
 
 // @cloudflare/workers-types に依存しないための最小の構造型
@@ -52,12 +52,23 @@ const missingKv = (binding: string): KartoreKv => {
 };
 
 /**
- * Workers のエントリ。wrangler.jsonc の assets で `run_worker_first: ["/api/*"]` にし、
- * 静的ファイルと SPA fallback は assets に任せる前提
+ * Workers のエントリ。wrangler.jsonc の assets で `run_worker_first: ["<base>api/*"]` にし、
+ * 静的ファイルと SPA fallback は assets に任せる前提。
+ * kartore({ base: '/studio/' }) なら assets に `base_path: "/studio/"` と `run_worker_first: ["/studio/api/*"]` を書く
+ * (base_path で、ビルドの出力 (dist/client) が `/studio/` の下に見え、SPA fallback も `/studio/` の下だけで効く)
  *
  * ```ts
  * // worker.ts
  * export default createCloudflareHandler();
+ * ```
+ *
+ * ```jsonc
+ * // wrangler.jsonc
+ * "assets": {
+ *   "base_path": "/studio/",
+ *   "not_found_handling": "single-page-application",
+ *   "run_worker_first": ["/studio/api/*"]
+ * }
  * ```
  */
 export const createCloudflareHandler = ({
@@ -74,10 +85,11 @@ export const createCloudflareHandler = ({
 				kv,
 				waitUntil: (promise) => ctx.waitUntil(promise),
 				platform: 'cloudflare',
-				handlerId: handler.id
+				handlerId: handler.id,
+				base
 			})
 		);
-		// /api 以外は run_worker_first の対象外なので通常は来ない
+		// <base>api/* 以外は run_worker_first の対象外なので、assets に無いパス (base の外) だけが来る
 		return response ?? new Response('Not found', { status: 404 });
 	}
 });

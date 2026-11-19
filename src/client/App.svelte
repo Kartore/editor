@@ -5,22 +5,29 @@
 
 	import { findModulePage } from './modulePages.ts';
 	import NotFound from './NotFound.svelte';
+	import { resolveClientRoute } from './routing.ts';
 
 	let {
 		appVersion,
+		base = '/',
 		storage,
 		scope = null
-	}: { appVersion: string; storage?: EditorStorage; scope?: string | null } = $props();
+	}: {
+		appVersion: string;
+		base?: string;
+		storage?: EditorStorage;
+		scope?: string | null;
+	} = $props();
 
-	// SPA のルーティング: `/` はエディタ、`/<module id>/<page path>` はアダプタページ。
+	// SPA のルーティング: `<base>` はエディタ、`<base><module id>/<page path>` はアダプタページ、base の外は 404。
 	// アダプタページは window.open 等のフルロードで開かれるため、クライアント側遷移は扱わない
 	const url = new URL(location.href);
-	const modulePath = url.pathname.replace(/^\/+|\/+$/g, '');
-	const ModulePage = modulePath === '' ? null : findModulePage(modulePath);
+	const route = $derived(resolveClientRoute(url.pathname, base));
+	const ModulePage = $derived(route.kind === 'page' ? findModulePage(route.modulePath) : null);
 </script>
 
 <EditorRoot>
-	{#if modulePath === ''}
+	{#if route.kind === 'editor'}
 		<Editor {appVersion} {storage} {scope} />
 	{:else if ModulePage}
 		<ModulePage {url} />
