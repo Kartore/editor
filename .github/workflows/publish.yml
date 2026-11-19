@@ -1,0 +1,42 @@
+# @kartore/editor を npm に publish する (tag `v*` の push で実行)。
+# npm の trusted publishing (OIDC) で認証し、provenance を付ける。トークンは使わない
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 26
+          registry-url: https://registry.npmjs.org
+
+      - name: Enable Corepack
+        run: corepack enable pnpm
+
+      - name: Install pnpm
+        run: corepack install
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check
+        run: |
+          pnpm check
+          pnpm test
+          pnpm build
+
+      # npm (11.5+) の trusted publishing で publish する。prepare で kartore() プリセットをビルドし直す
+      - name: Publish
+        run: npm publish --access public --provenance

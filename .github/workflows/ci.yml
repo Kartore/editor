@@ -45,8 +45,5 @@ jobs:
       - name: Build (kartore() preset)
         run: pnpm build
 
-      - name: Build playground (Cloudflare)
-        run: pnpm --filter playground build
-
-      - name: Build playground (Node)
-        run: pnpm --filter playground build:node
+      # 最初のリリースの間は playground を workspace から外している (pnpm-workspace.yaml)。
+      # @kartore/file-adapter 0.8.0 の publish 後に戻し、playground の build もここに戻す

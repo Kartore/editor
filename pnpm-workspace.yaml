@@ -1,5 +1,6 @@
-packages:
-  - playground
+# 最初のリリースの間だけ playground を外している (playground が使う @kartore/file-adapter 0.8.0 は
+# @kartore/editor 0.1.0 の publish 後に出るため)。file-adapter 0.8.0 の publish 後に戻す
+packages: []
 
 engineStrict: true
 
