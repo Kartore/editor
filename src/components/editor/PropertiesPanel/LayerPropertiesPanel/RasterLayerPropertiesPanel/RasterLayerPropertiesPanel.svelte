@@ -1,0 +1,54 @@
+<script lang="ts">
+	import type {
+		RasterLayerSpecification,
+		SpriteSpecification
+	} from '@maplibre/maplibre-gl-style-spec';
+	import type { Snippet } from 'svelte';
+	import type { HTMLAttributes } from 'svelte/elements';
+
+	import { GeneralProperties } from '#src/components/editor/PropertiesPanel/LayerPropertiesPanel/common/GeneralProperties';
+	import { SpecPropertiesSection } from '#src/components/editor/PropertiesPanel/LayerPropertiesPanel/common/SpecPropertiesSection';
+	import { createSpriteIds } from '#src/components/editor/PropertiesPanel/LayerPropertiesPanel/hooks/useSpriteIds/useSpriteIds.svelte.ts';
+	import type { onChangeType } from '#src/components/editor/PropertiesPanel/LayerPropertiesPanel/utils/LayerUtil/LayerUtil.ts';
+	import { cn } from '#src/utils/tailwindUtil.ts';
+
+	let {
+		children,
+		layer,
+		sprite,
+		onChange,
+		class: className,
+		...props
+	}: Omit<HTMLAttributes<HTMLDivElement>, 'onchange'> & {
+		class?: string;
+		layer: RasterLayerSpecification;
+		sprite?: SpriteSpecification;
+		onChange?: onChangeType;
+		children?: Snippet;
+	} = $props();
+
+	const spriteIdsState = createSpriteIds(() => sprite);
+	const spriteIds = $derived(spriteIdsState.spriteIds);
+	const spriteImages = $derived(spriteIdsState.spriteImages);
+</script>
+
+<div {...props} class={cn('flex flex-col', className)}>
+	<SpecPropertiesSection
+		{layer}
+		groups={['layout']}
+		title="Layout"
+		{spriteIds}
+		{spriteImages}
+		{onChange}
+	/>
+	<SpecPropertiesSection
+		{layer}
+		groups={['paint']}
+		title="Paint"
+		{spriteIds}
+		{spriteImages}
+		{onChange}
+	/>
+	<GeneralProperties {layer} {onChange} />
+	{@render children?.()}
+</div>

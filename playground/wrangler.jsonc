@@ -1,0 +1,12 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "kartore-playground",
+	"compatibility_date": "2026-07-05",
+	"compatibility_flags": ["nodejs_als"],
+	"main": "./worker.ts",
+	"assets": {
+		// /api/* だけ worker、それ以外は静的ファイル。見つからなければ index.html (SPA)
+		"not_found_handling": "single-page-application",
+		"run_worker_first": ["/api/*"]
+	}
+}

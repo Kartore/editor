@@ -1,19 +1,14 @@
+packages:
+  - playground
+
 engineStrict: true
-registries:
-  '@kartore-internal': https://npm.pkg.github.com/
 
 enableGlobalVirtualStore: true
 
 configDependencies:
   '@pnpm/pacquet': 0.11.12
 
-packageExtensions:
-  '@sveltejs/kit@3.0.0-next.25':
-    dependencies:
-      rolldown: ^1.1.2
-
 minimumReleaseAgeExclude:
-  - '@kartore-internal/github-adapter'
   - '@kartore/file-adapter'
   - '@kartore/spritore'
   - '@kartore/glyphore'

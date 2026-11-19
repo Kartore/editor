@@ -1,0 +1,60 @@
+import path from 'node:path';
+
+import { describe, expect, it } from 'vitest';
+
+import { editorPrebundleDependencies, resolveHostModulePath } from './adapters.ts';
+
+const root = path.resolve('/pkg/src');
+
+describe('resolveHostModulePath', () => {
+	it('resolves editor modules under src', () => {
+		expect(resolveHostModulePath('components/common/Button', root)).toBe(
+			path.join(root, 'components/common/Button')
+		);
+		expect(resolveHostModulePath('utils/styleImport.ts', root)).toBe(
+			path.join(root, 'utils/styleImport.ts')
+		);
+	});
+
+	it('hides runtime, build, SPA shell and entry files from adapters', () => {
+		for (const hidden of [
+			'server/index.ts',
+			'vite/index.ts',
+			'client/entry.ts',
+			'index.ts',
+			'types.ts'
+		]) {
+			expect(resolveHostModulePath(hidden, root)).toBeNull();
+		}
+		expect(resolveHostModulePath('../package.json', root)).toBeNull();
+		expect(resolveHostModulePath('components/../server/node.ts', root)).toBeNull();
+	});
+});
+
+describe('editorPrebundleDependencies', () => {
+	it('pre-bundles browser dependencies of the editor, not build tools or Svelte sources', () => {
+		expect(
+			editorPrebundleDependencies({
+				dependencies: {
+					'@codemirror/state': '^6',
+					'@sveltejs/vite-plugin-svelte': '^7',
+					'@tailwindcss/vite': '^4',
+					srvx: '1',
+					'svelte-maplibre-gl': '^2',
+					'tailwind-merge': '^3'
+				},
+				peerDependencies: {
+					'bits-ui': '^2',
+					'maplibre-gl': '^6',
+					svelte: '^5',
+					tailwindcss: '^4',
+					vite: '^8'
+				}
+			})
+		).toEqual([
+			'@kartore/editor > @codemirror/state',
+			'@kartore/editor > tailwind-merge',
+			'maplibre-gl'
+		]);
+	});
+});

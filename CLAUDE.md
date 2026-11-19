@@ -2,7 +2,8 @@
 
 - **Language**: TypeScript
 - **Package Manager**: pnpm
-- **Add-ons**: prettier, eslint, tailwindcss, sveltekit-adapter, experimental, mcp
+- **Add-ons**: prettier, eslint, tailwindcss, mcp
+- **Structure**: `@kartore/editor` package (no SvelteKit). Public entries are the files directly under `src/` (`index.ts`, `types.ts`, `storage.ts`, `export.ts`) plus `src/server/` and `src/vite/`; `src/client/` is the SPA shell; everything else under `src/` is the editor (imported as `#src/...`, exposed to adapters as `virtual:kartore-host/...`). Dev host is `playground/`
 
 ---
 

@@ -1,0 +1,66 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+	spriteDimensionsFromSvg,
+	spriteFileUrl,
+	spriteIdFromFileName,
+	svgDataUrl
+} from './spriteSvg.ts';
+
+describe('sprite SVG helpers', () => {
+	it('uses positive integer width and height attributes directly', () => {
+		expect(spriteDimensionsFromSvg('<svg width="32" height="18" viewBox="0 0 64 36" />')).toEqual({
+			width: 32,
+			height: 18,
+			hasIntegerSizeAttributes: true
+		});
+	});
+
+	it('uses attribute values provisionally and preserves viewBox aspect ratio', () => {
+		expect(spriteDimensionsFromSvg('<svg width="2rem" viewBox="0 0 40 20" />')).toEqual({
+			width: 2,
+			height: 1,
+			hasIntegerSizeAttributes: false
+		});
+	});
+
+	it('falls back to viewBox dimensions', () => {
+		expect(spriteDimensionsFromSvg('<svg viewBox="0 0 48 24" />')).toEqual({
+			width: 48,
+			height: 24,
+			hasIntegerSizeAttributes: false
+		});
+	});
+
+	it('sanitizes file stems and encodes data URLs', () => {
+		expect(spriteIdFromFileName('Train stop (east).SVG')).toBe('Train-stop--east-');
+		expect(svgDataUrl('<svg fill="#fff" />')).toBe(
+			`data:image/svg+xml,${encodeURIComponent('<svg fill="#fff" />')}`
+		);
+	});
+
+	it('adds explicit dimensions for SVG preview data URLs', () => {
+		const svg = '<svg viewBox="0 0 30 30"><rect width="30" height="30" /></svg>';
+		const sizedSvg =
+			'<svg viewBox="0 0 30 30" width="30" height="30"><rect width="30" height="30" /></svg>';
+
+		expect(svgDataUrl(svg, { width: 30, height: 30 })).toBe(
+			`data:image/svg+xml,${encodeURIComponent(sizedSvg)}`
+		);
+	});
+});
+
+describe('spriteFileUrl', () => {
+	it('adds the extension to the path, before the query (like MapLibre)', () => {
+		expect(spriteFileUrl('https://example.com/sprites/a', '.json')).toBe(
+			'https://example.com/sprites/a.json'
+		);
+		expect(spriteFileUrl('https://example.com/sprites/a?key=k', '.png')).toBe(
+			'https://example.com/sprites/a.png?key=k'
+		);
+		expect(spriteFileUrl('cloudmap://sprites/a?v=2', '.json')).toBe(
+			'cloudmap://sprites/a.json?v=2'
+		);
+		expect(spriteFileUrl('sprites/a', '.json')).toBe('sprites/a.json');
+	});
+});
