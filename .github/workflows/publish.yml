@@ -40,4 +40,6 @@ jobs:
 
       # npm (11.5+) の trusted publishing で publish する。prepare で kartore() プリセットをビルドし直す
       - name: Publish
-        run: npm publish --access public --provenance
+        run: |
+          npm --version
+          npm publish --access public --provenance --loglevel verbose
