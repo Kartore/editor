@@ -2,7 +2,11 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { editorPrebundleDependencies, resolveHostModulePath } from './adapters.ts';
+import {
+	editorPrebundleDependencies,
+	resolveHostModulePath,
+	adapterHostModuleCode
+} from './adapters.ts';
 
 const root = path.resolve('/pkg/src');
 
@@ -56,5 +60,26 @@ describe('editorPrebundleDependencies', () => {
 			'@kartore/editor > tailwind-merge',
 			'maplibre-gl'
 		]);
+	});
+});
+
+describe('adapter host modules', () => {
+	const hostModules = new Map([
+		['kartore-github-adapter', { connection: './githubConnection.ts', allowRepository: undefined }]
+	]);
+
+	it('re-exports the host module the host passed, resolved from the host root', () => {
+		expect(adapterHostModuleCode('kartore-github-adapter/connection', hostModules, '/host')).toBe(
+			'export { default } from "/host/githubConnection.ts";\n'
+		);
+	});
+
+	it('exports undefined for keys and adapters the host did not configure', () => {
+		const empty = 'export default undefined;\n';
+		expect(adapterHostModuleCode('kartore-github-adapter/allowRepository', hostModules, '/h')).toBe(
+			empty
+		);
+		expect(adapterHostModuleCode('kartore-github-adapter/other', hostModules, '/h')).toBe(empty);
+		expect(adapterHostModuleCode('unknown-adapter/connection', hostModules, '/h')).toBe(empty);
 	});
 });

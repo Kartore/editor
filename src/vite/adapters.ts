@@ -7,6 +7,8 @@ import type { Plugin } from 'vite';
 const clientVirtualModuleId = 'virtual:kartore-adapter';
 const serverVirtualModuleId = 'virtual:kartore-adapter/server';
 const hostModulePrefix = 'virtual:kartore-host/';
+/** `virtual:kartore-adapter-host/<adapter name>/<key>`: ホストがアダプタに渡すモジュール (manifest の hostModules) */
+export const adapterHostModulePrefix = 'virtual:kartore-adapter-host/';
 
 // `virtual:kartore-host/*` の解決先 = このパッケージ自身の src (エディタの実装)。
 // dist/vite.js から見た ../src。exports の "./vite" が dist/vite.js を指す前提
@@ -96,6 +98,12 @@ type KartoreAdapterApi = {
 	serverModule?: string;
 	/** optimizeDeps.exclude / ssr.noExternal に加える Svelte 系依存 */
 	svelteDependencies?: string[];
+	/**
+	 * ホストがアダプタに渡すモジュール (key → ホスト root からのパス)。アダプタは
+	 * `virtual:kartore-adapter-host/<manifest の name>/<key>` の default export で受け取る。
+	 * 渡されていない key は `export default undefined` になる
+	 */
+	hostModules?: Record<string, string | undefined>;
 };
 
 /** アダプタが export するマニフェスト型と同じ形 (コア側で独立に定義し、特定アダプタに依存しない) */
@@ -162,6 +170,24 @@ const aggregateModule = (moduleIds: string[], exportNames: string[]): string => 
 	return [...imports, ...aggregates, ''].join('\n');
 };
 
+/**
+ * `virtual:kartore-adapter-host/<adapter name>/<key>` の中身。ホストが渡したパスがあれば、その default export を、
+ * 無ければ undefined を default export する
+ */
+export const adapterHostModuleCode = (
+	target: string,
+	hostModules: ReadonlyMap<string, Record<string, string | undefined>>,
+	root: string
+): string => {
+	const separator = target.lastIndexOf('/');
+	const adapterName = separator < 0 ? target : target.slice(0, separator);
+	const key = separator < 0 ? '' : target.slice(separator + 1);
+	const modulePath = hostModules.get(adapterName)?.[key];
+	return modulePath
+		? `export { default } from ${JSON.stringify(path.resolve(root, modulePath))};\n`
+		: 'export default undefined;\n';
+};
+
 const registryPlugin = (adapters: KartoreAdapterVitePlugin[]): Plugin => {
 	// 同一アダプタが二重に渡されてもモジュールが二重登録されないよう clientModule で重複排除する
 	const apis = [
@@ -179,6 +205,12 @@ const registryPlugin = (adapters: KartoreAdapterVitePlugin[]): Plugin => {
 		])
 	];
 	const registeredIds = new Set(clientIds);
+	// ホストのモジュールを import するサーバーモジュールも Vite で変換する (Node の SSR で外部のままだと仮想モジュールを解決できない)
+	const serverDependencies = [...new Set(serverIds)];
+	const hostModules = new Map(
+		adapters.map(({ name, api }) => [name, api.kartoreAdapter.hostModules ?? {}])
+	);
+	let root = process.cwd();
 	const resolvedIds = new Map([
 		[clientVirtualModuleId, '\0' + clientVirtualModuleId],
 		[serverVirtualModuleId, '\0' + serverVirtualModuleId]
@@ -190,13 +222,14 @@ const registryPlugin = (adapters: KartoreAdapterVitePlugin[]): Plugin => {
 			// editor・アダプタ本体と Svelte 系依存はソースのままホスト側でコンパイルする
 			return {
 				optimizeDeps: {
-					exclude: svelteDependencies,
+					exclude: [...svelteDependencies, ...serverDependencies],
 					include: editorPrebundleDependencies(readEditorDependencies())
 				},
-				ssr: { noExternal: svelteDependencies }
+				ssr: { noExternal: [...svelteDependencies, ...serverDependencies] }
 			};
 		},
 		configResolved(config) {
+			root = config.root;
 			// kartore() を通さず plugins に直接置かれたアダプタは機能しない。事故防止に警告する
 			for (const plugin of config.plugins) {
 				const api = kartoreAdapterApi(plugin);
@@ -210,6 +243,7 @@ const registryPlugin = (adapters: KartoreAdapterVitePlugin[]): Plugin => {
 		async resolveId(id, importer) {
 			const registryId = resolvedIds.get(id);
 			if (registryId) return registryId;
+			if (id.startsWith(adapterHostModulePrefix)) return '\0' + id;
 			if (!id.startsWith(hostModulePrefix)) return;
 
 			const target = resolveHostModulePath(id.slice(hostModulePrefix.length));
@@ -227,6 +261,13 @@ const registryPlugin = (adapters: KartoreAdapterVitePlugin[]): Plugin => {
 			}
 			if (id === resolvedIds.get(serverVirtualModuleId)) {
 				return aggregateModule(serverIds, ['adapterApiHandlers']);
+			}
+			if (id.startsWith('\0' + adapterHostModulePrefix)) {
+				return adapterHostModuleCode(
+					id.slice(1 + adapterHostModulePrefix.length),
+					hostModules,
+					root
+				);
 			}
 		}
 	};
