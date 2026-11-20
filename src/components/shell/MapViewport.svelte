@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { LayerSpecification, StyleSpecification } from 'maplibre-gl';
+	import type { LayerSpecification, MapSourceDataEvent, StyleSpecification } from 'maplibre-gl';
 	import { Compass, Crosshair, Minus, Plus } from 'phosphor-svelte';
 	import type { Snippet } from 'svelte';
 
@@ -18,6 +18,11 @@
 	import { MapPanel } from '#src/components/editor/MapPanel';
 	import { useBackgroundMap } from '#src/contexts/backgroundMap.svelte.ts';
 	import { colorVisionMatrixValues, type ColorVisionMode } from '#src/utils/colorVision.ts';
+	import {
+		type AttributionPart,
+		collectMapAttributions,
+		parseAttribution
+	} from '#src/utils/mapAttribution.ts';
 
 	let {
 		mapStyle,
@@ -96,6 +101,34 @@
 	const colorVisionMatrix = $derived(
 		activeColorVisionMode ? colorVisionMatrixValues(activeColorVisionMode) : ''
 	);
+
+	// 右下の attribution はスタイルのソースから集める (MapLibre の AttributionControl は外しているため)
+	let attributions = $state<AttributionPart[][]>([]);
+	$effect(() => {
+		const map = backgroundMap.map;
+		if (!map) {
+			attributions = [];
+			return;
+		}
+		let current = '';
+		const update = () => {
+			const next = collectMapAttributions(map);
+			const key = next.join('\n');
+			if (key === current) return;
+			current = key;
+			attributions = next.map(parseAttribution).filter((parts) => parts.length > 0);
+		};
+		const handleSourceData = (event: MapSourceDataEvent) => {
+			if (event.sourceDataType === 'metadata' || event.sourceDataType === 'visibility') update();
+		};
+		update();
+		map.on('styledata', update);
+		map.on('sourcedata', handleSourceData);
+		return () => {
+			map.off('styledata', update);
+			map.off('sourcedata', handleSourceData);
+		};
+	});
 </script>
 
 <main class="relative min-w-0 flex-1 overflow-hidden bg-canvas">
@@ -209,14 +242,24 @@
 		<span>{latitude.toFixed(3)}, {longitude.toFixed(3)}</span>
 	</div>
 
-	<a
-		class="absolute right-3 bottom-3 z-10 rounded-[4px] bg-white/90 px-1.5 py-0.5 text-[9px] text-ink-3 hover:text-accent"
-		href="https://www.openstreetmap.org/copyright"
-		target="_blank"
-		rel="noreferrer"
-	>
-		© OpenStreetMap contributors
-	</a>
+	{#if attributions.length > 0}
+		<div
+			class="absolute right-3 bottom-3 z-10 flex max-w-[min(480px,calc(100%-14rem))] flex-wrap justify-end gap-x-[0.3em] rounded-[4px] bg-white/90 px-1.5 py-0.5 text-right text-[9px] text-ink-3"
+		>
+			{#each attributions as parts, i (i)}
+				{#if i > 0}<span aria-hidden="true">|</span>{/if}
+				{#each parts as part, j (j)}
+					{#if part.href}
+						<a class="hover:text-accent" href={part.href} target="_blank" rel="noreferrer"
+							>{part.text}</a
+						>
+					{:else}
+						<span>{part.text}</span>
+					{/if}
+				{/each}
+			{/each}
+		</div>
+	{/if}
 
 	{@render children?.()}
 </main>
