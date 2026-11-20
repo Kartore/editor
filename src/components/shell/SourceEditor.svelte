@@ -63,7 +63,8 @@
 	});
 
 	const patch = (values: SourceRecord, remove: string[] = []) => {
-		const next = structuredClone(source) as unknown as SourceRecord;
+		// source は mapStyle の $state プロキシなので structuredClone できない。snapshot が複製になる
+		const next = $state.snapshot(source as object) as SourceRecord;
 		for (const key of remove) Reflect.deleteProperty(next, key);
 		Object.assign(next, values);
 		onChange(next as SourceSpecification);
@@ -118,10 +119,11 @@
 	const changeType = (value: string) => {
 		const nextType = value as SourceType;
 		if (nextType === source.type) return;
-		const current = source as unknown as SourceRecord;
+		// snapshot は深い複製なので、以下はそのまま next に載せてよい
+		const current = $state.snapshot(source as object) as SourceRecord;
 		const next: SourceRecord = { type: nextType };
 		const copy = (key: string) => {
-			if (current[key] !== undefined) next[key] = structuredClone(current[key]);
+			if (current[key] !== undefined) next[key] = current[key];
 		};
 
 		if (nextType === 'vector' || nextType === 'raster' || nextType === 'raster-dem') {
@@ -154,20 +156,18 @@
 			}
 		} else if (nextType === 'geojson') {
 			next.data =
-				current.data !== undefined
-					? structuredClone(current.data)
-					: { type: 'FeatureCollection', features: [] };
+				current.data !== undefined ? current.data : { type: 'FeatureCollection', features: [] };
 			copy('maxzoom');
 			copy('attribution');
 		} else if (nextType === 'video') {
-			next.urls = current.urls ? structuredClone(current.urls) : [''];
+			next.urls = current.urls ?? [''];
 			next.coordinates = current.coordinates
-				? structuredClone(current.coordinates)
+				? current.coordinates
 				: structuredClone(defaultCoordinates);
 		} else {
 			next.url = typeof current.url === 'string' ? current.url : '';
 			next.coordinates = current.coordinates
-				? structuredClone(current.coordinates)
+				? current.coordinates
 				: structuredClone(defaultCoordinates);
 		}
 		onChange(next as SourceSpecification);

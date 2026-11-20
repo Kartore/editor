@@ -89,7 +89,8 @@
 					: '—';
 
 	const applyPatch = (patch: Record<string, unknown>, remove: string[] = []) => {
-		const next = structuredClone(layer) as LayerSpecification;
+		// layer は mapStyle の $state プロキシなので structuredClone できない。snapshot が複製になる
+		const next = $state.snapshot(layer as object) as LayerSpecification;
 		const record = next as unknown as Record<string, unknown>;
 		for (const key of remove) Reflect.deleteProperty(record, key);
 		Object.assign(record, patch);
