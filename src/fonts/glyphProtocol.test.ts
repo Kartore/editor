@@ -56,7 +56,7 @@ describe('glyph protocol loader', () => {
 			{ url: 'kartore-glyph://Noto%20Sans%20JP%20Regular/0-255.pbf' },
 			new AbortController()
 		);
-		expect(new Uint8Array(response.data)).toEqual(Uint8Array.from([7, 8, 9]));
+		expect(new Uint8Array(response.data as ArrayBuffer)).toEqual(Uint8Array.from([7, 8, 9]));
 		expect(generateRange).toHaveBeenCalledWith('Noto Sans JP Regular', 0);
 		expect(fetchGlyphs).not.toHaveBeenCalled();
 	});
@@ -85,7 +85,7 @@ describe('glyph protocol loader', () => {
 			'https://example.com/fonts/Open Sans Regular/0-255.pbf',
 			expect.objectContaining({ signal: abortController.signal })
 		);
-		expect(new Uint8Array(response.data)).toEqual(Uint8Array.from([3, 2, 1]));
+		expect(new Uint8Array(response.data as ArrayBuffer)).toEqual(Uint8Array.from([3, 2, 1]));
 		expect(response.etag).toBe('test-etag');
 	});
 

@@ -44,7 +44,7 @@ describe('editorPrebundleDependencies', () => {
 					'@sveltejs/vite-plugin-svelte': '^7',
 					'@tailwindcss/vite': '^4',
 					srvx: '1',
-					'svelte-maplibre-gl': '^2',
+					'phosphor-svelte': '^3',
 					'tailwind-merge': '^3'
 				},
 				peerDependencies: {
