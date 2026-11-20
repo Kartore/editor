@@ -1,4 +1,9 @@
-import type { SpriteIcons, SpriteIconsStoreAdapter } from './SpriteIconsStoreAdapter.ts';
+import type {
+	SpriteIcon,
+	SpriteIcons,
+	SpriteIconsStoreAdapter
+} from './SpriteIconsStoreAdapter.ts';
+import { normalizeSpriteIcons, spriteIcon } from './spriteIconsFormat.ts';
 
 export type SpriteIconsStoreOptions = {
 	adapter: SpriteIconsStoreAdapter;
@@ -11,7 +16,9 @@ export class SpriteIconsStore {
 	#onChange: (() => void) | undefined;
 	#loadGeneration = 0;
 
-	icons = $state<SpriteIcons>({});
+	// 値がオブジェクトなので深いプロキシにしない (IndexedDB の put は構造化複製でプロキシを複製できない)。
+	// 常に丸ごと差し替えるので raw でも反応する
+	icons = $state.raw<SpriteIcons>({});
 	isLoading = $state(true);
 	isSaving = $state(false);
 	loadError = $state<Error | null>(null);
@@ -35,8 +42,9 @@ export class SpriteIconsStore {
 		return this.ready;
 	};
 
-	setIcon = (id: string, svg: string) => {
-		this.icons = { ...this.icons, [id]: svg };
+	setIcon = (id: string, icon: SpriteIcon) => {
+		// 呼び出し元のオブジェクト (プロキシの可能性がある) を持ち込まず、正規形で作り直す
+		this.icons = { ...this.icons, [id]: spriteIcon(icon.svg, icon.sdf === true) };
 		this.#onChange?.();
 		void this.#save({ ...this.icons });
 	};
@@ -50,8 +58,13 @@ export class SpriteIconsStore {
 		void this.#save(icons);
 	};
 
+	/**
+	 * アイコン集合を丸ごと置き換える。アダプタや古いサーバーが旧形式 (`{ 名前: SVG }`) を渡しても受ける
+	 * (host API の入口なので、型どおりでない値も正規形にする)
+	 */
 	replaceIcons = async (icons: SpriteIcons): Promise<void> => {
-		const replacement = { ...icons };
+		const replacement = normalizeSpriteIcons(icons);
+		if (!replacement) throw new Error('Invalid sprite icons.');
 		this.isSaving = true;
 		this.saveError = null;
 		try {

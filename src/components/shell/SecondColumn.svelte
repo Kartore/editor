@@ -5,6 +5,7 @@
 	import type { EditorPreview, StyleHistoryProvider } from '#src/editor/EditorModule.ts';
 	import type { RegisteredEditorRailItem } from '#src/editor/editorRail.ts';
 	import type { FontMeta, LoadedFont, StoredFont } from '#src/stores/fonts';
+	import type { SpriteIcon, SpriteIcons } from '#src/stores/spriteIcons';
 	import type { RootPropertyKind } from '#src/utils/layerSpec.ts';
 	import type { LayerValidationError } from '#src/utils/styleValidation.ts';
 	import type { StyleSettingChange } from '#src/utils/styleRoot.ts';
@@ -60,7 +61,7 @@
 		layerErrors?: Record<string, LayerValidationError[]>;
 		styleErrors?: string[];
 		readOnly?: boolean;
-		spriteIcons: Record<string, string>;
+		spriteIcons: SpriteIcons;
 		fonts: Record<string, FontMeta>;
 		historyProvider?: StyleHistoryProvider | null;
 		addLayerOpen?: boolean;
@@ -71,7 +72,7 @@
 		onToggleLayerVisibility?: (layer: LayerSpecification, visible: boolean) => void;
 		onLayerDragActiveChange?: (active: boolean) => void;
 		onApplyStyle: (style: StyleSpecification) => void;
-		onSetSpriteIcon: (id: string, svg: string) => void;
+		onSetSpriteIcon: (id: string, icon: SpriteIcon) => void;
 		onRemoveSpriteIcon: (id: string) => void;
 		onAddFont: (bytes: ArrayBuffer | Uint8Array) => Promise<FontInfo>;
 		onRemoveFont: (name: string) => Promise<void>;

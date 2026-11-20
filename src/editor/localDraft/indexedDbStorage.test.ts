@@ -24,7 +24,7 @@ describe('createIndexedDbEditorStorage', () => {
 		const a = storage.open('prod:u1:o1:a');
 		const b = storage.open('prod:u1:o1:b');
 		await a.style.save(style('A'));
-		await a.icons.save({ pin: '<svg/>' });
+		await a.icons.save({ pin: { svg: '<svg/>', sdf: true } });
 		await a.fonts.save('A Regular', font('A'));
 		await b.fonts.save('B Regular', font('B'));
 		await a.meta.save({
@@ -36,7 +36,7 @@ describe('createIndexedDbEditorStorage', () => {
 
 		expect(await a.style.load()).toMatchObject({ name: 'A' });
 		expect(await b.style.load()).toBeNull();
-		expect(await a.icons.load()).toEqual({ pin: '<svg/>' });
+		expect(await a.icons.load()).toEqual({ pin: { svg: '<svg/>', sdf: true } });
 		expect(await b.icons.load()).toBeNull();
 		expect(Object.keys((await a.fonts.load()) ?? {})).toEqual(['A Regular']);
 		expect(Object.keys((await b.fonts.load()) ?? {})).toEqual(['B Regular']);

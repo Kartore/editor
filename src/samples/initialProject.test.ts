@@ -22,7 +22,7 @@ describe('initial.kartore', () => {
 		expect(opened.style.layers.some((layer) => getLayerGroup(layer) !== undefined)).toBe(true);
 		expect(buildLayerTreeRows(opened.style.layers).some((row) => row.kind === 'group')).toBe(true);
 		expect(Object.keys(opened.assets.icons)).toHaveLength(244);
-		expect(opened.assets.icons.airport_11).toContain('<svg');
+		expect(opened.assets.icons.airport_11.svg).toContain('<svg');
 		expect(Object.keys(opened.assets.fonts).sort()).toEqual(
 			referencedFontStacks(opened.style).sort()
 		);

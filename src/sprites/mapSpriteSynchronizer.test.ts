@@ -3,12 +3,22 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('./spritore.ts', () => ({
 	loadSpritore: async () => ({
-		renderIcon: async (id: string, _svg: string, pixelRatio: number) => ({
-			id,
-			width: 10 * pixelRatio,
-			height: 10 * pixelRatio,
-			pixels: new Uint8Array(10 * pixelRatio * 10 * pixelRatio * 4)
-		})
+		renderIcon: async (
+			id: string,
+			_svg: string,
+			pixelRatio: number,
+			options: { sdf?: boolean } = {}
+		) => {
+			// spritore と同じく SDF は 3 論理 px の余白が付く
+			const size = (10 + (options.sdf ? 6 : 0)) * pixelRatio;
+			return {
+				id,
+				width: size,
+				height: size,
+				pixels: new Uint8Array(size * size * 4),
+				sdf: options.sdf === true
+			};
+		}
 	})
 }));
 
@@ -21,7 +31,10 @@ const createFakeMap = () => {
 	const map = {
 		images,
 		// MapLibre と同じく、追加の中で同期的に styledata を出す
-		addImage: vi.fn((id: string) => {
+		// 引数 (画像と options) は mock.calls で検証する
+		addImage: vi.fn<
+			(id: string, image: unknown, options?: { pixelRatio?: number; sdf?: boolean }) => void
+		>((id) => {
 			if (images.has(id)) throw new Error(`An image named "${id}" already exists.`);
 			images.set(id, { source: 'local' });
 			for (const listener of listeners) listener();
@@ -48,7 +61,7 @@ describe('MapSpriteSynchronizer', () => {
 	it('keeps local icons over sprite sheet images with the same id', async () => {
 		const map = createFakeMap();
 		const synchronizer = new MapSpriteSynchronizer(() => {});
-		synchronizer.input = { map: map as unknown as MaplibreMap, icons: { arrow: svg } };
+		synchronizer.input = { map: map as unknown as MaplibreMap, icons: { arrow: { svg } } };
 		await vi.waitFor(() => expect(map.images.get('arrow')?.source).toBe('local'));
 
 		// シートが後から読み込まれて上書きしても、ローカルを入れ直す
@@ -63,6 +76,38 @@ describe('MapSpriteSynchronizer', () => {
 		const calls = map.addImage.mock.calls.length;
 		map.loadSheet([]);
 		expect(map.addImage.mock.calls.length).toBe(calls);
+	});
+
+	it('re-adds the image with the sdf option when only sdf changes', async () => {
+		const map = createFakeMap();
+		const synchronizer = new MapSpriteSynchronizer(() => {});
+		synchronizer.input = { map: map as unknown as MaplibreMap, icons: { arrow: { svg } } };
+		await vi.waitFor(() => expect(map.addImage).toHaveBeenCalledTimes(1));
+		expect(map.addImage.mock.calls[0][2]).toEqual({ pixelRatio: 2, sdf: false });
+
+		synchronizer.input = {
+			map: map as unknown as MaplibreMap,
+			icons: { arrow: { svg, sdf: true } }
+		};
+		await vi.waitFor(() => expect(map.addImage).toHaveBeenCalledTimes(2));
+		expect(map.addImage.mock.calls[1][1]).toMatchObject({ width: 32, height: 32 });
+		expect(map.addImage.mock.calls[1][2]).toEqual({ pixelRatio: 2, sdf: true });
+
+		synchronizer.input = { map: map as unknown as MaplibreMap, icons: { arrow: { svg } } };
+		await vi.waitFor(() => expect(map.addImage).toHaveBeenCalledTimes(3));
+		expect(map.addImage.mock.calls[2][2]).toEqual({ pixelRatio: 2, sdf: false });
+	});
+
+	it('reports SVG dimensions without the SDF padding', async () => {
+		const map = createFakeMap();
+		const onDimensions = vi.fn();
+		const synchronizer = new MapSpriteSynchronizer(onDimensions);
+		synchronizer.input = {
+			map: map as unknown as MaplibreMap,
+			icons: { arrow: { svg, sdf: true } }
+		};
+		await vi.waitFor(() => expect(onDimensions).toHaveBeenCalled());
+		expect(onDimensions.mock.lastCall?.[0].arrow).toMatchObject({ width: 10, height: 10 });
 	});
 
 	it('stops listening when destroyed or when the map changes', async () => {

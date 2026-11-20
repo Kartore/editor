@@ -222,8 +222,8 @@ importers:
         specifier: ^0.2.0
         version: 0.2.0
       '@kartore/spritore':
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.3.0
+        version: 0.3.0
       '@maplibre/maplibre-gl-style-spec':
         specifier: ^26.4.1
         version: 26.4.1
@@ -1049,8 +1049,8 @@ packages:
     resolution: {integrity: sha512-PGcA24BynHK8I2WZLKzAeNxYF2Ztan0j62jKZHt9vQXDcEWK5d49eAZSFgf0UGdspF/dqLRVnHBe0cqKFjj4kw==}
     hasBin: true
 
-  '@kartore/spritore@0.2.0':
-    resolution: {integrity: sha512-fXtv5qGo7e2lwQy4hTUDNFhdgrNCDGpa/DL3q58ydZLg2M3WKeAvac+0tLkMiIUxRfwdqMKK2hAig3MdMJBbvg==}
+  '@kartore/spritore@0.3.0':
+    resolution: {integrity: sha512-BZvaVqSVq32I3DZYs285zNOzewYR9amU/eEjB5NtTYJk34rsU/uACImDskApGzCTR/VX7WWX+F6+buQZh2jUBA==}
     hasBin: true
 
   '@lezer/common@1.5.2':
@@ -3429,7 +3429,7 @@ snapshots:
 
   '@kartore/glyphore@0.2.0': {}
 
-  '@kartore/spritore@0.2.0': {}
+  '@kartore/spritore@0.3.0': {}
 
   '@lezer/common@1.5.2': {}
 

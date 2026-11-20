@@ -2,6 +2,8 @@ import type { StyleSpecification } from 'maplibre-gl';
 
 import type { StoredFont } from '#src/stores/fonts';
 import type { SpriteIcons } from '#src/stores/spriteIcons';
+// 公開エントリ (export.ts) からも使うので、store (runes) を含む index ではなく直接読む
+import { spriteIcon } from '#src/stores/spriteIcons/spriteIconsFormat.ts';
 
 import { parseStyleJSON } from './styleImport.ts';
 import {
@@ -27,9 +29,15 @@ type StylePackMeta = {
 	createdAt: string;
 };
 
+/**
+ * sprites.json のエントリ。設定の無いアイコンはファイル名の文字列 (既存ファイルとバイト一致)、
+ * 設定のあるアイコンだけオブジェクトにする (MapLibre の sprite index のエントリと同じく、設定をアイコンごとに持つ)
+ */
+type SpriteIndexEntry = string | { file: string; sdf: true };
+
 type SpriteIndex = {
 	version: 1;
-	icons: Record<string, string>;
+	icons: Record<string, SpriteIndexEntry>;
 };
 
 type FontIndexEntry = {
@@ -197,9 +205,10 @@ export const createStyleAssetFiles = (assets: StylePackAssets): StylePackFiles =
 	const spriteFiles = new Set<string>();
 	const spriteIndex: SpriteIndex = { version: 1, icons: {} };
 	for (const name of Object.keys(assets.icons).sort(compareKeys)) {
+		const icon = assets.icons[name];
 		const file = allocateSanitizedBasename(name, '.svg', spriteFiles);
-		spriteIndex.icons[name] = file;
-		files[packPath(SPRITE_DIRECTORY, file)] = assets.icons[name];
+		spriteIndex.icons[name] = icon.sdf === true ? { file, sdf: true } : file;
+		files[packPath(SPRITE_DIRECTORY, file)] = icon.svg;
 	}
 	files[SPRITE_INDEX_FILE] = serializeStyleAuxiliary(spriteIndex);
 
@@ -243,6 +252,23 @@ const readManifest = (
 	return manifest as { formatVersion: 1; appVersion: string; createdAt: string };
 };
 
+/**
+ * sprites.json のエントリを読む。文字列 (ファイル名だけ) か `{ file, sdf? }`。
+ * 知らないキーはエラーにする (新しい Kartore が足した設定を黙って落とさないため)
+ */
+const readSpriteIndexEntry = (value: unknown): { file: string; sdf: boolean } => {
+	if (typeof value === 'string')
+		return { file: requireIndexFileName(value, SPRITE_INDEX_FILE), sdf: false };
+	if (
+		!isRecord(value) ||
+		Object.keys(value).some((key) => key !== 'file' && key !== 'sdf') ||
+		(value.sdf !== undefined && typeof value.sdf !== 'boolean')
+	) {
+		throw new Error('Invalid assets/sprites.json in style pack.');
+	}
+	return { file: requireIndexFileName(value.file, SPRITE_INDEX_FILE), sdf: value.sdf === true };
+};
+
 const readSpriteIndex = (
 	files: Readonly<Record<string, string | Uint8Array>>,
 	expectedPaths: Set<string>
@@ -254,10 +280,10 @@ const readSpriteIndex = (
 
 	const icons: SpriteIcons = {};
 	for (const name of Object.keys(index.icons).sort(compareKeys)) {
-		const file = requireIndexFileName(index.icons[name], SPRITE_INDEX_FILE);
+		const { file, sdf } = readSpriteIndexEntry(index.icons[name]);
 		const path = packPath(SPRITE_DIRECTORY, file);
 		expectedPaths.add(path);
-		icons[name] = readTextFile(files, path);
+		icons[name] = spriteIcon(readTextFile(files, path), sdf);
 	}
 	return icons;
 };

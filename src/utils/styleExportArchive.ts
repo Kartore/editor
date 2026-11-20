@@ -1,6 +1,7 @@
 import type { StyleSpecification } from 'maplibre-gl';
 
 import type { LoadedFont } from '#src/stores/fonts';
+import type { SpriteIcons } from '#src/stores/spriteIcons';
 import { buildGlyphFiles as buildGlyphFilesForFont } from '#src/fonts/glyphDownload.ts';
 import { loadGlyphore } from '#src/fonts/glyphore.ts';
 import { loadSpritore } from '#src/sprites/spritore.ts';
@@ -22,7 +23,7 @@ const compareKeys = (left: string, right: string): number =>
 	left < right ? -1 : left > right ? 1 : 0;
 
 export type StyleExportArchiveAssets = {
-	icons: Readonly<Record<string, string>>;
+	icons: Readonly<SpriteIcons>;
 	fontstacks: readonly string[];
 	getLoadedFont: (fontstack: string) => Promise<LoadedFont | null>;
 };
@@ -66,13 +67,14 @@ export const createStyleExportArchiveFiles = (
 	return files;
 };
 
-/** ローカルのアイコン (SVG) から sprite.json / sprite.png / sprite@2x.json / sprite@2x.png を作る。アイコンが無ければ空 */
-export const buildSpriteFiles = async (
-	icons: Readonly<Record<string, string>>
-): Promise<StylePackFiles> => {
+/**
+ * ローカルのアイコン (SVG) から sprite.json / sprite.png / sprite@2x.json / sprite@2x.png を作る。アイコンが無ければ空。
+ * SDF のアイコンは index のエントリに `"sdf": true` が付く
+ */
+export const buildSpriteFiles = async (icons: Readonly<SpriteIcons>): Promise<StylePackFiles> => {
 	const spriteIcons = Object.entries(icons)
 		.sort(([left], [right]) => compareKeys(left, right))
-		.map(([id, svg]) => ({ id, svg }));
+		.map(([id, icon]) => ({ id, svg: icon.svg, sdf: icon.sdf === true }));
 	if (spriteIcons.length === 0) return {};
 
 	const { buildSpriteSheet } = await loadSpritore();

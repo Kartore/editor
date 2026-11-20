@@ -1,6 +1,8 @@
 import type { Map as MaplibreMap } from 'maplibre-gl';
 import type { RenderedIcon } from '@kartore/spritore';
 
+import type { SpriteIcon, SpriteIcons } from '#src/stores/spriteIcons';
+
 import { loadSpritore } from './spritore.ts';
 import { spriteDimensionsFromSvg } from './spriteSvg.ts';
 
@@ -11,19 +13,24 @@ export type LocalSpriteDimensions = {
 };
 
 type RenderedLocalSprite = RenderedIcon & {
-	svg: string;
+	/** 描画に使ったアイコンの識別キー (iconKey) */
+	key: string;
 };
 
 export type MapSpriteSyncInput = {
 	map: MaplibreMap | null;
-	icons: Record<string, string>;
+	icons: SpriteIcons;
 };
+
+/** SVG と SDF の組。どちらかが変われば描き直して地図の画像を入れ直す */
+const iconKey = (icon: SpriteIcon): string => `${icon.sdf === true ? 'sdf' : 'rgba'}:${icon.svg}`;
 
 export class MapSpriteSynchronizer {
 	#generation = 0;
 	#map: MaplibreMap | null = null;
-	#icons: Record<string, string> = {};
-	#synchronizedIconSvgs = new Map<string, string>();
+	#icons: SpriteIcons = {};
+	// 地図に入れたアイコンの iconKey
+	#synchronizedIconKeys = new Map<string, string>();
 	#renderedLocalSprites = new Map<string, RenderedLocalSprite>();
 	// 地図に入れたローカルアイコンの画像 (map.getImage の戻り値)。スプライトシートに置き換えられたかを見分けるのに使う
 	#addedImages = new Map<string, unknown>();
@@ -38,24 +45,24 @@ export class MapSpriteSynchronizer {
 	set input({ map, icons }: MapSpriteSyncInput) {
 		this.#icons = icons;
 		const entries = Object.entries(icons);
-		const iconSvgs = new Map(entries);
+		const iconKeys = new Map(entries.map(([id, icon]) => [id, iconKey(icon)]));
 		const generation = ++this.#generation;
 
 		if (map !== this.#map) {
 			this.#map?.setMissingStyleImageResolver(null);
 			this.#map?.off('styledata', this.#reapplyLocalSprites);
 			this.#map = map;
-			this.#synchronizedIconSvgs = new Map();
+			this.#synchronizedIconKeys = new Map();
 			this.#addedImages = new Map();
 			map?.setMissingStyleImageResolver(this.#resolveMissingStyleImage);
 			map?.on('styledata', this.#reapplyLocalSprites);
 		}
 
 		if (map) {
-			for (const [id, svg] of this.#synchronizedIconSvgs) {
-				if (iconSvgs.get(id) === svg) continue;
+			for (const [id, key] of this.#synchronizedIconKeys) {
+				if (iconKeys.get(id) === key) continue;
 				this.#removeLocalSprite(map, id);
-				this.#synchronizedIconSvgs.delete(id);
+				this.#synchronizedIconKeys.delete(id);
 				this.#addedImages.delete(id);
 			}
 		}
@@ -85,7 +92,8 @@ export class MapSpriteSynchronizer {
 		map.addImage(
 			sprite.id,
 			{ width: sprite.width, height: sprite.height, data: sprite.pixels },
-			{ pixelRatio: 2 }
+			// SDF の画素は RGB が 0 でアルファだけが距離。フラグと画素の組を必ず揃える
+			{ pixelRatio: 2, sdf: sprite.sdf }
 		);
 		this.#addedImages.set(sprite.id, map.getImage(sprite.id));
 	}
@@ -100,9 +108,10 @@ export class MapSpriteSynchronizer {
 		if (!map || this.#reapplying) return;
 		this.#reapplying = true;
 		try {
-			for (const [id, svg] of this.#synchronizedIconSvgs) {
+			for (const [id, key] of this.#synchronizedIconKeys) {
 				const sprite = this.#renderedLocalSprites.get(id);
-				if (!sprite || sprite.svg !== svg || this.#icons[id] !== svg) continue;
+				const icon = this.#icons[id];
+				if (!sprite || sprite.key !== key || !icon || iconKey(icon) !== key) continue;
 				const current = map.getImage(id);
 				if (current !== undefined && current === this.#addedImages.get(id)) continue;
 				try {
@@ -116,13 +125,15 @@ export class MapSpriteSynchronizer {
 		}
 	};
 
-	async #synchronize(generation: number, map: MaplibreMap | null, entries: [string, string][]) {
+	async #synchronize(generation: number, map: MaplibreMap | null, entries: [string, SpriteIcon][]) {
 		try {
 			const { renderIcon } = await loadSpritore();
 			const nextRenderedSprites = new Map<string, RenderedLocalSprite>();
 			const nextDimensions: Record<string, LocalSpriteDimensions> = {};
 
-			for (const [id, svg] of entries) {
+			for (const [id, icon] of entries) {
+				const { svg } = icon;
+				const key = iconKey(icon);
 				const svgDimensions = spriteDimensionsFromSvg(svg);
 				nextDimensions[id] = {
 					svg,
@@ -132,9 +143,12 @@ export class MapSpriteSynchronizer {
 				try {
 					const cached = this.#renderedLocalSprites.get(id);
 					const rendered =
-						cached?.svg === svg ? cached : { ...(await renderIcon(id, svg, 2)), svg };
+						cached?.key === key
+							? cached
+							: { ...(await renderIcon(id, svg, 2, { sdf: icon.sdf === true })), key };
 					nextRenderedSprites.set(id, rendered);
 
+					// 寸法は SVG の論理サイズ (SDF の余白を含めない) なので sdf 無しで測る
 					if (!svgDimensions.hasIntegerSizeAttributes) {
 						const oneX = await renderIcon(id, svg, 1);
 						nextDimensions[id] = { svg, width: oneX.width, height: oneX.height };
@@ -150,12 +164,12 @@ export class MapSpriteSynchronizer {
 
 			if (!map || this.#map !== map) return;
 			for (const [id, sprite] of nextRenderedSprites) {
-				if (this.#synchronizedIconSvgs.get(id) === sprite.svg && map.hasImage(id)) continue;
+				if (this.#synchronizedIconKeys.get(id) === sprite.key && map.hasImage(id)) continue;
 				try {
 					this.#addLocalSprite(map, sprite);
-					this.#synchronizedIconSvgs.set(id, sprite.svg);
+					this.#synchronizedIconKeys.set(id, sprite.key);
 				} catch {
-					this.#synchronizedIconSvgs.delete(id);
+					this.#synchronizedIconKeys.delete(id);
 				}
 			}
 		} catch {
@@ -166,13 +180,18 @@ export class MapSpriteSynchronizer {
 	#resolveMissingStyleImage = async (id: string) => {
 		const map = this.#map;
 		if (!map) return;
-		const svg = this.#icons[id];
-		if (svg === undefined) return;
+		const icon = this.#icons[id];
+		if (icon === undefined) return;
+		const key = iconKey(icon);
+		const isCurrent = () => {
+			const current = this.#icons[id];
+			return this.#map === map && current !== undefined && iconKey(current) === key;
+		};
 		const cached = this.#renderedLocalSprites.get(id);
-		if (cached?.svg === svg) {
+		if (cached?.key === key) {
 			try {
 				this.#addLocalSprite(map, cached);
-				this.#synchronizedIconSvgs.set(id, svg);
+				this.#synchronizedIconKeys.set(id, key);
 			} catch {
 				// 次の欠落画像解決時に再試行する。
 			}
@@ -181,12 +200,15 @@ export class MapSpriteSynchronizer {
 
 		try {
 			const { renderIcon } = await loadSpritore();
-			if (this.#map !== map || this.#icons[id] !== svg) return;
-			const rendered = { ...(await renderIcon(id, svg, 2)), svg };
-			if (this.#map !== map || this.#icons[id] !== svg) return;
+			if (!isCurrent()) return;
+			const rendered = {
+				...(await renderIcon(id, icon.svg, 2, { sdf: icon.sdf === true })),
+				key
+			};
+			if (!isCurrent()) return;
 			this.#renderedLocalSprites.set(id, rendered);
 			this.#addLocalSprite(map, rendered);
-			this.#synchronizedIconSvgs.set(id, svg);
+			this.#synchronizedIconKeys.set(id, key);
 		} catch {
 			// 無効な SVG や初期化エラーは欠落画像のまま扱う。
 		}

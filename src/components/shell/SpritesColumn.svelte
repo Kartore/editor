@@ -5,11 +5,14 @@
 	import { SvelteSet } from 'svelte/reactivity';
 
 	import { Button } from '#src/components/common/Button';
+	import { Switch } from '#src/components/common/Switch';
 	import { TextField } from '#src/components/common/TextField';
 	import { createSpriteSheetImageIds } from '#src/components/editor/PropertiesPanel/LayerPropertiesPanel/hooks/useSpriteIds/useSpriteIds.svelte.ts';
 	import { findShadowedSpriteIds } from '#src/sprites/spriteConflicts.ts';
 	import { loadSpritore } from '#src/sprites/spritore.ts';
 	import { spriteIdFromFileName, svgDataUrl } from '#src/sprites/spriteSvg.ts';
+	import { spriteIcon, type SpriteIcon, type SpriteIcons } from '#src/stores/spriteIcons';
+	import { buildSpriteFiles } from '#src/utils/styleExportArchive.ts';
 	import { spriteUsageLayerIds } from '#src/utils/assetUsage.ts';
 	import { cn } from '#src/utils/tailwindUtil.ts';
 
@@ -22,9 +25,9 @@
 		onSelectLayer
 	}: {
 		mapStyle: StyleSpecification;
-		icons: Record<string, string>;
+		icons: SpriteIcons;
 		readOnly?: boolean;
-		onSetIcon: (id: string, svg: string) => void;
+		onSetIcon: (id: string, icon: SpriteIcon) => void;
 		onRemoveIcon: (id: string) => void;
 		onSelectLayer?: (layerId: string) => void;
 	} = $props();
@@ -46,7 +49,7 @@
 			.sort(([left], [right]) => left.localeCompare(right))
 	);
 	const iconRows = $derived.by(() => {
-		const rows: [string, string][][] = [];
+		const rows: [string, SpriteIcon][][] = [];
 		for (let index = 0; index < iconEntries.length; index += 5) {
 			rows.push(iconEntries.slice(index, index + 5));
 		}
@@ -61,7 +64,7 @@
 	// スタイルの sprite に同じ名前の画像があるローカルアイコン (地図ではローカルが優先され、シート側は隠れる)
 	const spriteSheet = createSpriteSheetImageIds(() => mapStyle.sprite);
 	const shadowedIds = $derived(findShadowedSpriteIds(Object.keys(icons), spriteSheet.ids ?? []));
-	const selectedSvg = $derived(selectedId ? icons[selectedId] : undefined);
+	const selectedIcon = $derived(selectedId ? icons[selectedId] : undefined);
 	const selectedUsages = $derived(selectedId ? spriteUsageLayerIds(mapStyle, selectedId) : []);
 	const selectIcon = (id: string) => {
 		selectedId = selectedId === id ? undefined : id;
@@ -77,7 +80,7 @@
 
 	const errorMessage = (error: unknown): string =>
 		error instanceof Error ? error.message : String(error);
-	const validateIcons = async (entries: [string, string][]) => {
+	const validateIcons = async (entries: [string, SpriteIcon][]) => {
 		const generation = ++validationGeneration;
 		if (entries.length === 0) {
 			validationErrors = {};
@@ -88,7 +91,7 @@
 		try {
 			const { renderIcon } = await loadSpritore();
 			const errors: Record<string, string | undefined> = {};
-			for (const [id, svg] of entries) {
+			for (const [id, { svg }] of entries) {
 				try {
 					await renderIcon(id, svg, 1);
 				} catch (error) {
@@ -118,9 +121,10 @@
 				continue;
 			}
 			try {
-				const svg = await file.text();
-				onSetIcon(id, svg);
-				nextIcons[id] = svg;
+				// 上書きしても SDF の設定は引き継ぐ
+				const icon = spriteIcon(await file.text(), nextIcons[id]?.sdf === true);
+				onSetIcon(id, icon);
+				nextIcons[id] = icon;
 				occupiedIds.add(id);
 				selectedId = id;
 			} catch (error) {
@@ -142,13 +146,17 @@
 		);
 	};
 	const renameIcon = (nextName: string) => {
-		if (!selectedId || !selectedSvg || readOnly) return;
+		if (!selectedId || !selectedIcon || readOnly) return;
 		const trimmed = nextName.trim();
 		if (!trimmed || trimmed === selectedId || trimmed in icons) return;
 		const previousId = selectedId;
-		onSetIcon(trimmed, selectedSvg);
+		onSetIcon(trimmed, selectedIcon);
 		onRemoveIcon(previousId);
 		selectedId = trimmed;
+	};
+	const setSelectedSdf = (sdf: boolean) => {
+		if (!selectedId || !selectedIcon || readOnly) return;
+		onSetIcon(selectedId, spriteIcon(selectedIcon.svg, sdf));
 	};
 	const confirmDelete = (id: string) => {
 		if (readOnly) return;
@@ -172,16 +180,12 @@
 		downloadError = undefined;
 		await tick();
 		try {
-			const { buildSpriteSheet } = await loadSpritore();
-			const spriteIcons = validIconEntries.map(([id, svg]) => ({ id, svg }));
-			const [oneX, twoX] = await Promise.all([
-				buildSpriteSheet(spriteIcons, 1),
-				buildSpriteSheet(spriteIcons, 2)
-			]);
-			downloadBlob(oneX.indexJson, 'application/json', 'sprite.json');
-			downloadBlob(oneX.png, 'image/png', 'sprite.png');
-			downloadBlob(twoX.indexJson, 'application/json', 'sprite@2x.json');
-			downloadBlob(twoX.png, 'image/png', 'sprite@2x.png');
+			// エクスポートと同じ生成 (SDF の指定もここで反映される)
+			const files = await buildSpriteFiles(Object.fromEntries(validIconEntries));
+			downloadBlob(files['sprite.json'], 'application/json', 'sprite.json');
+			downloadBlob(files['sprite.png'], 'image/png', 'sprite.png');
+			downloadBlob(files['sprite@2x.json'], 'application/json', 'sprite@2x.json');
+			downloadBlob(files['sprite@2x.png'], 'image/png', 'sprite@2x.png');
 		} catch (error) {
 			downloadError = errorMessage(error);
 		} finally {
@@ -266,22 +270,31 @@
 				<p class="col-span-5 self-center text-center text-[10px] text-ink-3">No sprites.</p>
 			{:else}
 				{#each iconRows as row (row[0][0])}
-					{#each row as [id, svg] (id)}
+					{#each row as [id, icon] (id)}
 						<button
 							type="button"
 							class={cn(
 								'flex aspect-square items-center justify-center rounded-[6px] border border-hairline-soft p-1 text-ink-2 outline-none hover:bg-field focus-visible:border-accent',
 								selectedId === id && 'border-accent outline-1 outline-accent'
 							)}
-							aria-label={`Select ${id}`}
-							title={id}
+							aria-label={icon.sdf ? `Select ${id} (SDF)` : `Select ${id}`}
+							title={icon.sdf ? `${id} (SDF)` : id}
 							onclick={() => selectIcon(id)}
 						>
-							<img src={svgDataUrl(svg)} alt="" class="max-h-full max-w-full" />
+							{#if icon.sdf}
+								<!-- SDF は色が失われ形だけ残るので、シルエットで見せる -->
+								<span
+									class="block size-full bg-ink-1"
+									style:mask={`url("${svgDataUrl(icon.svg)}") center / contain no-repeat`}
+									aria-hidden="true"
+								></span>
+							{:else}
+								<img src={svgDataUrl(icon.svg)} alt="" class="max-h-full max-w-full" />
+							{/if}
 						</button>
 					{/each}
 					{@const rowSelected = row.some(([id]) => id === selectedId)}
-					{#if rowSelected && selectedId && selectedSvg}
+					{#if rowSelected && selectedId && selectedIcon}
 						<div
 							{@attach registerSelectedDetail}
 							class="col-span-5 flex flex-col gap-1 border-t border-hairline-soft px-3 pt-1 pb-2.5 text-[10px]"
@@ -292,6 +305,15 @@
 								disabled={readOnly}
 								onCommit={renameIcon}
 							/>
+							<div class="flex flex-col">
+								<Switch
+									label="SDF"
+									checked={selectedIcon.sdf === true}
+									disabled={readOnly}
+									onCheckedChange={setSelectedSdf}
+								/>
+								<p class="text-ink-3">Single colour. Tint it with icon-color and icon-halo-*.</p>
+							</div>
 							{#if validationErrors[selectedId]}
 								<p class="text-ink-2" role="alert">{validationErrors[selectedId]}</p>
 							{:else if isValidating}

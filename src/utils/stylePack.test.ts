@@ -43,7 +43,7 @@ const fontBytes = (...bytes: number[]): ArrayBuffer => new Uint8Array(bytes).buf
 
 const assets = (): StylePackAssets => ({
 	icons: {
-		marker: '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0"/></svg>'
+		marker: { svg: '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0"/></svg>' }
 	},
 	fonts: {
 		'Inter Regular': {
@@ -133,8 +133,8 @@ describe('stylePack', () => {
 			style(),
 			{
 				icons: {
-					'icon/a': '<svg id="a"/>',
-					icon_a: '<svg id="b"/>'
+					'icon/a': { svg: '<svg id="a"/>' },
+					icon_a: { svg: '<svg id="b"/>' }
 				},
 				fonts: {
 					'font/a': {
@@ -239,7 +239,7 @@ describe('stylePack', () => {
 		const files = createStylePack(
 			style(),
 			{
-				icons: { [decomposed]: '<svg />' },
+				icons: { [decomposed]: { svg: '<svg />' } },
 				fonts: {}
 			},
 			META
@@ -247,6 +247,58 @@ describe('stylePack', () => {
 
 		expect(Object.keys(files)).toContain('assets/sprites/Café.svg');
 		expect(Object.keys(files)).not.toContain(`assets/sprites/${decomposed}.svg`);
+	});
+
+	it('writes SDF icons as entry objects and reads them back', () => {
+		const files = createStylePack(
+			style(),
+			{
+				icons: {
+					pin: { svg: '<svg id="pin"/>', sdf: true },
+					marker: { svg: '<svg id="marker"/>' }
+				},
+				fonts: {}
+			},
+			META
+		);
+
+		expect(JSON.parse(files['assets/sprites.json'] as string).icons).toEqual({
+			marker: 'marker.svg',
+			pin: { file: 'pin.svg', sdf: true }
+		});
+		expect(readStylePack(files).assets.icons).toEqual({
+			marker: { svg: '<svg id="marker"/>' },
+			pin: { svg: '<svg id="pin"/>', sdf: true }
+		});
+	});
+
+	it('keeps plain file names when no icon is SDF', () => {
+		const files = createStylePack(style(), assets(), META);
+		expect(JSON.parse(files['assets/sprites.json'] as string)).toEqual({
+			version: 1,
+			icons: { marker: 'marker.svg' }
+		});
+	});
+
+	it('reads entry objects without sdf or with sdf: false as plain icons', () => {
+		const files = createStylePack(style(), assets(), META);
+		for (const entry of [{ file: 'marker.svg' }, { file: 'marker.svg', sdf: false }]) {
+			files['assets/sprites.json'] = JSON.stringify({ version: 1, icons: { marker: entry } });
+			expect(readStylePack(files).assets.icons.marker).toEqual({
+				svg: '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0"/></svg>'
+			});
+		}
+	});
+
+	it.each([
+		['a non-boolean sdf', { file: 'marker.svg', sdf: 'yes' }],
+		['an unknown setting', { file: 'marker.svg', stretchX: [[0, 1]] }],
+		['a missing file', { sdf: true }],
+		['an array', ['marker.svg']]
+	])('rejects an entry with %s', (_label, entry) => {
+		const files = createStylePack(style(), assets(), META);
+		files['assets/sprites.json'] = JSON.stringify({ version: 1, icons: { marker: entry } });
+		expect(() => readStylePack(files)).toThrow(/assets\/sprites\.json/);
 	});
 
 	it('emits byte-identical file maps after save, open, and save', () => {

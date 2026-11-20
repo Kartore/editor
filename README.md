@@ -81,17 +81,17 @@ on the same origin must not use those names. The playground runs this setup with
 
 ## Exports
 
-| Subpath                                       | Contents                                                                                                     |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `@kartore/editor/vite`                        | `kartore()` preset                                                                                           |
-| `@kartore/editor/types`                       | Types only: `EditorModule`, `EditorApi`, `KartoreRuntime`, `AdapterApiHandler`, local draft types, …         |
-| `@kartore/editor/paths`                       | Client URLs under the host base: `base`, `withBase(path)`, `apiPath(id, path)`, `pagePath(id, path)`         |
-| `@kartore/editor/server`                      | `handleKartoreRequest(request, createRuntime)` (runtime-agnostic server core), `createRuntimeBase`           |
-| `@kartore/editor/server/cloudflare` / `/node` | `createCloudflareHandler()` / `startNodeServer()`                                                            |
-| `@kartore/editor/server/kv`                   | `memoryKv()`, `sqliteKv(path)` (`node:sqlite`)                                                               |
-| `@kartore/editor/storage`                     | Local draft storage: `createIndexedDbEditorStorage()`, `createDefaultEditorStorage()`, `listUnsavedDrafts()` |
-| `@kartore/editor/export`                      | style.json / sprite (spritore) / glyph (glyphore) / ZIP builders and content hashes                          |
-| `@kartore/editor`                             | `Editor` / `EditorRoot` Svelte components                                                                    |
+| Subpath                                       | Contents                                                                                                            |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `@kartore/editor/vite`                        | `kartore()` preset                                                                                                  |
+| `@kartore/editor/types`                       | Types only: `EditorModule`, `EditorApi`, `SpriteIcons`, `KartoreRuntime`, `AdapterApiHandler`, local draft types, … |
+| `@kartore/editor/paths`                       | Client URLs under the host base: `base`, `withBase(path)`, `apiPath(id, path)`, `pagePath(id, path)`                |
+| `@kartore/editor/server`                      | `handleKartoreRequest(request, createRuntime)` (runtime-agnostic server core), `createRuntimeBase`                  |
+| `@kartore/editor/server/cloudflare` / `/node` | `createCloudflareHandler()` / `startNodeServer()`                                                                   |
+| `@kartore/editor/server/kv`                   | `memoryKv()`, `sqliteKv(path)` (`node:sqlite`)                                                                      |
+| `@kartore/editor/storage`                     | Local draft storage: `createIndexedDbEditorStorage()`, `createDefaultEditorStorage()`, `listUnsavedDrafts()`        |
+| `@kartore/editor/export`                      | style.json / sprite (spritore) / glyph (glyphore) / ZIP builders and content hashes                                 |
+| `@kartore/editor`                             | `Editor` / `EditorRoot` Svelte components                                                                           |
 
 ### Local drafts (per-style storage)
 

@@ -32,11 +32,13 @@ describe('applyProjectLoad', () => {
 
 		await applyProjectLoad(target, {
 			style,
-			assets: { icons: { marker: '<svg />' }, fonts: { 'Inter Regular': font } }
+			assets: { icons: { marker: { svg: '<svg />', sdf: true } }, fonts: { 'Inter Regular': font } }
 		});
 
 		expect(events).toEqual(['icons', 'fonts', 'style']);
-		expect(target.replaceSpriteIcons).toHaveBeenCalledWith({ marker: '<svg />' });
+		expect(target.replaceSpriteIcons).toHaveBeenCalledWith({
+			marker: { svg: '<svg />', sdf: true }
+		});
 		expect(target.replaceStoredFonts).toHaveBeenCalledWith({ 'Inter Regular': font });
 	});
 
@@ -55,7 +57,10 @@ describe('applyProjectLoad', () => {
 		vi.mocked(target.replaceSpriteIcons).mockRejectedValueOnce(new Error('quota exceeded'));
 
 		await expect(
-			applyProjectLoad(target, { style, assets: { icons: { marker: '<svg />' }, fonts: {} } })
+			applyProjectLoad(target, {
+				style,
+				assets: { icons: { marker: { svg: '<svg />' } }, fonts: {} }
+			})
 		).rejects.toThrow('quota exceeded');
 
 		expect(target.replaceStoredFonts).not.toHaveBeenCalled();

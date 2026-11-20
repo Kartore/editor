@@ -1,11 +1,8 @@
-import type { SpriteIcons, SpriteIconsStoreAdapter } from './SpriteIconsStoreAdapter.ts';
+import type { SpriteIconsStoreAdapter } from './SpriteIconsStoreAdapter.ts';
+import { normalizeSpriteIcons } from './spriteIconsFormat.ts';
 
+// 旧形式 (値が SVG 文字列) の頃からのキー。値の形が変わっても読み込み時に変換するので据え置く
 const STORAGE_KEY = 'kartore:sprite-svgs';
-
-export const isSpriteIcons = (value: unknown): value is SpriteIcons => {
-	if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-	return Object.values(value).every((svg) => typeof svg === 'string');
-};
 
 export const localStorageSpriteIconsStoreAdapter: SpriteIconsStoreAdapter = {
 	id: 'local-storage',
@@ -15,7 +12,7 @@ export const localStorageSpriteIconsStoreAdapter: SpriteIconsStoreAdapter = {
 
 		try {
 			const parsedValue: unknown = JSON.parse(storedValue);
-			return isSpriteIcons(parsedValue) ? parsedValue : null;
+			return normalizeSpriteIcons(parsedValue);
 		} catch {
 			return null;
 		}

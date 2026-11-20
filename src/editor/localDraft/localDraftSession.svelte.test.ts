@@ -5,6 +5,7 @@ import { FontsStore } from '../../stores/fonts/fontsStore.svelte.ts';
 import type { StoredFont } from '../../stores/fonts/FontsStoreAdapter.ts';
 import { MapStyleStore } from '../../stores/mapStyle/mapStyleStore.svelte.ts';
 import { SpriteIconsStore } from '../../stores/spriteIcons/spriteIconsStore.svelte.ts';
+import type { SpriteIcons } from '../../stores/spriteIcons/SpriteIconsStoreAdapter.ts';
 
 import { LocalDraftSession } from './localDraftSession.svelte.ts';
 import type { EditorStorage, LocalDraftMeta, LocalDraftStore } from './types.ts';
@@ -17,7 +18,7 @@ const memoryStorage = (confirmUnsaved = true) => {
 		string | null,
 		{
 			style?: StyleSpecification;
-			icons?: Record<string, string>;
+			icons?: SpriteIcons;
 			fonts: Map<string, StoredFont>;
 			meta?: LocalDraftMeta;
 		}
@@ -142,7 +143,7 @@ describe('LocalDraftSession', () => {
 	it('discards unsaved edits and opens the scope empty', async () => {
 		const { storage, entry, scopes } = memoryStorage();
 		entry('a').style = style('local draft');
-		entry('a').icons = { pin: '<svg/>' };
+		entry('a').icons = { pin: { svg: '<svg/>' } };
 		entry('a').meta = { editedAt: 500, savedAt: null, saved: false, adapters: {} };
 
 		const { session, stores, opened } = createEditor(storage, 'a');
@@ -166,7 +167,7 @@ describe('LocalDraftSession', () => {
 	it('switches scopes: writes the old scope, then reads the new one', async () => {
 		const { storage, entry } = memoryStorage();
 		entry('b').style = style('B');
-		entry('b').icons = { b: '<svg/>' };
+		entry('b').icons = { b: { svg: '<svg/>' } };
 		const { session, stores, opened } = createEditor(storage, 'a');
 		await opened;
 		const listener = vi.fn();
@@ -181,7 +182,7 @@ describe('LocalDraftSession', () => {
 		expect(entry('a').meta).toMatchObject({ saved: false });
 		expect(session.scope).toBe('b');
 		expect(stores.style.mapStyle.name).toBe('B');
-		expect(stores.icons.icons).toEqual({ b: '<svg/>' });
+		expect(stores.icons.icons).toEqual({ b: { svg: '<svg/>' } });
 		expect(stores.style.canUndo).toBe(false);
 		expect(session.hasUnsavedEdits).toBe(false);
 		expect(listener).toHaveBeenLastCalledWith(expect.objectContaining({ scope: 'b' }));

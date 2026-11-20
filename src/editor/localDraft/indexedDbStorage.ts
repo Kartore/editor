@@ -7,7 +7,7 @@ import {
 	type IndexedDbFactoryProvider
 } from '../../stores/indexedDb.ts';
 import { isStyleSpecification } from '../../stores/mapStyle/localStorageMapStyleStoreAdapter.ts';
-import { isSpriteIcons } from '../../stores/spriteIcons/localStorageSpriteIconsStoreAdapter.ts';
+import { normalizeSpriteIcons } from '../../stores/spriteIcons/spriteIconsFormat.ts';
 
 import { isLocalDraftMeta } from './meta.ts';
 import type { EditorStorage, LocalDraftStore, LocalDraftSummary } from './types.ts';
@@ -88,7 +88,7 @@ export const createIndexedDbEditorStorage = ({
 				id: `indexed-db:${key}`,
 				load: async () => {
 					const value = await read(ICONS, key);
-					return isSpriteIcons(value) ? value : null;
+					return normalizeSpriteIcons(value);
 				},
 				save: (icons) =>
 					write(ICONS, (transaction) => transaction.objectStore(ICONS).put(icons, key))
