@@ -36,7 +36,6 @@ export const resolveHostModulePath = (hostPath: string, root = editorSrcRoot): s
 const editorSvelteDependencies = [
 	'@kartore/editor',
 	'bits-ui',
-	'svelte-maplibre-gl',
 	'phosphor-svelte',
 	'@tanstack/svelte-query'
 ];

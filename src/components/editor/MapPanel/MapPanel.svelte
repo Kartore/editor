@@ -1,18 +1,17 @@
 <script lang="ts">
 	import 'maplibre-gl/dist/maplibre-gl.css';
 	import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
-	import type {
-		LayerSpecification,
+	import {
 		Map as MaplibreMap,
-		MapGeoJSONFeature,
-		MapMouseEvent,
-		StyleSpecification
+		setWorkerUrl,
+		type LayerSpecification,
+		type MapGeoJSONFeature,
+		type MapMouseEvent,
+		type StyleSpecification
 	} from 'maplibre-gl';
-	import { setWorkerUrl } from 'maplibre-gl';
 	import { X } from 'phosphor-svelte';
 	import { onDestroy, onMount } from 'svelte';
 	import { fromAction } from 'svelte/attachments';
-	import { MapLibre } from 'svelte-maplibre-gl';
 
 	import { Button } from '#src/components/common/Button';
 	import {
@@ -417,10 +416,59 @@
 		onClickLayer?.(layer);
 	};
 
+	let mapContainer: HTMLDivElement;
+	// 最後に地図へ渡した style。同じものを setStyle し直さない
+	let appliedStyle: StyleSpecification | undefined;
+
+	// 地図は MapLibre をそのまま使う。ラッパーは MapLibre の内部 (Camera の transform など) を読むので、
+	// MapLibre のマイナー版で壊れることがある。ここでは公開 API だけを使う
+	const createMap = () => {
+		appliedStyle = style;
+		const created = new MaplibreMap({
+			container: mapContainer,
+			style: appliedStyle,
+			center: { lng: 139.767, lat: 35.681 },
+			zoom,
+			pitch,
+			bearing,
+			hash: true,
+			attributionControl: false,
+			maplibreLogo: false,
+			localIdeographFontFamily: false,
+			transformRequest: requestTransform?.transform
+		});
+		created.on('move', () => {
+			zoom = created.getZoom();
+			pitch = created.getPitch();
+			bearing = created.getBearing();
+			handleMapMove();
+		});
+		created.on('click', handleMapClick);
+		created.on('mousemove', handleMapMouseMove);
+		created.on('mouseout', handleMapMouseOut);
+		return created;
+	};
+
 	onMount(() => {
 		inspectAccent =
 			getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim() ||
 			inspectAccent;
+		const created = createMap();
+		map = created;
+		return () => {
+			map = undefined;
+			created.remove();
+		};
+	});
+
+	$effect(() => {
+		const next = style;
+		if (!map || next === appliedStyle) return;
+		appliedStyle = next;
+		map.setStyle(next);
+	});
+	$effect(() => {
+		if (map) map.getCanvas().style.cursor = cursor;
 	});
 	onDestroy(() => {
 		if (inspectHoverFrame !== undefined) cancelAnimationFrame(inspectHoverFrame);
@@ -445,26 +493,7 @@
 </script>
 
 <div class={cn('relative h-auto w-full', className)} {@attach inspectHighlightAttachment}>
-	<MapLibre
-		bind:map
-		bind:zoom
-		bind:pitch
-		bind:bearing
-		class="h-full w-full"
-		{style}
-		{cursor}
-		center={{ lng: 139.767, lat: 35.681 }}
-		hash
-		maplibreLogo={false}
-		attributionControl={false}
-		localIdeographFontFamily={false}
-		autoloadGlobalCss={false}
-		transformRequest={requestTransform?.transform}
-		onclick={handleMapClick}
-		onmove={handleMapMove}
-		onmousemove={handleMapMouseMove}
-		onmouseout={handleMapMouseOut}
-	/>
+	<div class="h-full w-full" bind:this={mapContainer}></div>
 
 	{#if layerPicker && !inspectActive && layerPickerSession === inspectSession}
 		<div

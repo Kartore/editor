@@ -72,7 +72,6 @@ describe('client chunk groups', () => {
 		// 後から読み込まれる style-spec / fflate や、editor 自身のソースは分けない
 		expect(group('/a/node_modules/@maplibre/maplibre-gl-style-spec/dist/index.mjs')).toBeNull();
 		expect(group('/a/node_modules/fflate/esm/browser.js')).toBeNull();
-		expect(group('/a/node_modules/svelte-maplibre-gl/dist/index.js')).toBeNull();
 		expect(group('/repo/svelte/src/app/Editor.svelte')).toBeNull();
 	});
 });

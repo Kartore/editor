@@ -92,7 +92,7 @@
 		"eslint-plugin-svelte": "^3.23.0",
 		"fake-indexeddb": "^6.2.8",
 		"globals": "^17.11.0",
-		"maplibre-gl": "^6.6.0",
+		"maplibre-gl": "^6.19.0",
 		"phosphor-svelte": "^3.1.0",
 		"prettier": "^3.9.6",
 		"prettier-plugin-svelte": "^4.1.0",
@@ -123,7 +123,6 @@
 		"clsx": "^2.1.1",
 		"fflate": "^0.8.3",
 		"srvx": "1.0.6",
-		"svelte-maplibre-gl": "^2.2.1",
 		"tailwind-merge": "^3.6.0"
 	},
 	"packageManager": "pnpm@12.1.0",
