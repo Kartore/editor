@@ -37,6 +37,12 @@
 		'aria-label'?: string;
 	} = $props();
 
+	const id = $props.id();
+	// SDF のプレビュー用フィルタ。CSS の filter: url() は同じ文書の SVG しか参照できないので、
+	// SDF の項目があるときだけこのコンポーネントに置く
+	const sdfFilterId = `${id}-sdf-preview`;
+	const hasSdfPreview = $derived(items.some((item) => item.preview?.sdf === true));
+
 	let searchValue = $state('');
 	let isOpen = $state(false);
 	let pendingCommit = $state<string>();
@@ -88,9 +94,28 @@
 		if (!item.preview) return '';
 		const ratio = item.preview.pixelRatio ?? 1;
 		const scale = previewScale(item);
-		return `left: ${-(item.preview.x / ratio) * scale}px; top: ${-(item.preview.y / ratio) * scale}px; transform: scale(${scale / ratio});`;
+		const position = `left: ${-(item.preview.x / ratio) * scale}px; top: ${-(item.preview.y / ratio) * scale}px; transform: scale(${scale / ratio});`;
+		return item.preview.sdf ? `${position} filter: url(#${sdfFilterId});` : position;
 	};
 </script>
+
+{#if hasSdfPreview}
+	<!--
+		SDF アイコンのプレビュー: MapLibre と同じくアルファの 0.75 を縁として不透明にし (距離場のぼやけを消す)、
+		文字色で塗る。0.6875〜0.8125 を 0→1 に引き伸ばして縁だけ少しなめらかにする
+	-->
+	<svg class="pointer-events-none absolute size-0" width="0" height="0" aria-hidden="true">
+		<defs>
+			<filter id={sdfFilterId} color-interpolation-filters="sRGB">
+				<feComponentTransfer in="SourceGraphic" result="shape">
+					<feFuncA type="linear" slope="8" intercept="-5.5" />
+				</feComponentTransfer>
+				<feFlood style="flood-color: var(--color-ink-1)" result="ink" />
+				<feComposite in="ink" in2="shape" operator="in" />
+			</filter>
+		</defs>
+	</svg>
+{/if}
 
 {#snippet preview(item: SelectItem)}
 	<span

@@ -16,6 +16,8 @@ export type SpriteImage = {
 	width: number;
 	height: number;
 	pixelRatio: number;
+	/** MapLibre の SDF アイコン (単色・icon-color で着色)。sprite.json の画像は距離場なのでそのまま描くとぼやける */
+	sdf?: boolean;
 };
 
 type SpriteJSONEntry = {
@@ -24,6 +26,7 @@ type SpriteJSONEntry = {
 	width?: unknown;
 	height?: unknown;
 	pixelRatio?: unknown;
+	sdf?: unknown;
 };
 
 const toSpriteImage = (
@@ -46,7 +49,8 @@ const toSpriteImage = (
 		y: entry.y,
 		width: entry.width,
 		height: entry.height,
-		pixelRatio: typeof entry.pixelRatio === 'number' && entry.pixelRatio > 0 ? entry.pixelRatio : 1
+		pixelRatio: typeof entry.pixelRatio === 'number' && entry.pixelRatio > 0 ? entry.pixelRatio : 1,
+		...(entry.sdf === true ? { sdf: true } : {})
 	};
 };
 

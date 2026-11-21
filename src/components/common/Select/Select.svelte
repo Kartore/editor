@@ -6,6 +6,8 @@
 		width: number;
 		height: number;
 		pixelRatio?: number;
+		/** SDF アイコン。プレビューは単色のシルエットで描く (距離場のぼやけを消す) */
+		sdf?: boolean;
 	};
 	export type SelectItem = {
 		value: string;

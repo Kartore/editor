@@ -76,7 +76,8 @@
 				y: image.y,
 				width: image.width,
 				height: image.height,
-				pixelRatio: image.pixelRatio
+				pixelRatio: image.pixelRatio,
+				sdf: image.sdf
 			}
 		})) ?? (spriteIds ?? []).map((spriteId) => ({ value: spriteId, label: spriteId }))
 	);

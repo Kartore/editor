@@ -127,7 +127,7 @@
 	const newStyleHandlers: NewStyleHandler[] = [];
 	const localSpriteDimensions = new SvelteMap<string, LocalSpriteDimensions>();
 	provideLocalSpriteImages(() =>
-		Object.entries(spriteIconsStore.icons).map(([id, { svg }]) => {
+		Object.entries(spriteIconsStore.icons).map(([id, { svg, sdf }]) => {
 			const fallback = spriteDimensionsFromSvg(svg);
 			const rendered = localSpriteDimensions.get(id);
 			const dimensions = rendered?.svg === svg ? rendered : fallback;
@@ -138,7 +138,8 @@
 				y: 0,
 				width: dimensions.width,
 				height: dimensions.height,
-				pixelRatio: 1
+				pixelRatio: 1,
+				...(sdf ? { sdf: true } : {})
 			};
 		})
 	);

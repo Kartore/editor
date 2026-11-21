@@ -58,7 +58,8 @@
 				y: image.y,
 				width: image.width,
 				height: image.height,
-				pixelRatio: image.pixelRatio
+				pixelRatio: image.pixelRatio,
+				sdf: image.sdf
 			}
 		}))
 	);
