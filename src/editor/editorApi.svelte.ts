@@ -1,3 +1,4 @@
+import type { SourceCatalogContext } from '#src/contexts/sourceCatalog.svelte.ts';
 import type { StyleHistoryContext } from '#src/contexts/styleHistory.svelte.ts';
 
 import type {
@@ -18,6 +19,7 @@ export type EditorApiDependencies = {
 	loadProject: (project: EditorProject) => Promise<void>;
 	preview: { get: () => EditorPreview | null; set: (preview: EditorPreview | null) => void };
 	styleHistory: Pick<StyleHistoryContext, 'register'>;
+	sourceCatalog: Pick<SourceCatalogContext, 'register'>;
 	saveProviders: SaveProvider[];
 	newStyleHandlers: NewStyleHandler[];
 	openRailItem: EditorApi['openRailItem'];
@@ -31,6 +33,7 @@ export const createEditorApi = ({
 	loadProject,
 	preview,
 	styleHistory,
+	sourceCatalog,
 	saveProviders,
 	newStyleHandlers,
 	openRailItem,
@@ -53,6 +56,7 @@ export const createEditorApi = ({
 		getPreview: preview.get,
 		registerStyleHistoryProvider: (provider) => styleHistory.register(provider),
 		registerSaveProvider: (provider) => saveProviders.push(provider),
+		registerSourceCatalog: (catalog) => sourceCatalog.register(catalog),
 		registerNewStyleHandler: (handler) => newStyleHandlers.push(handler),
 		openRailItem,
 		getDraftScope: () => localDraft.scope,

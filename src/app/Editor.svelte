@@ -44,6 +44,7 @@
 	import { provideEditorCommands } from '#src/contexts/editorCommands.svelte.ts';
 	import { provideExpressionFlyout } from '#src/contexts/expressionFlyout.svelte.ts';
 	import { provideRequestTransform } from '#src/contexts/requestTransform.ts';
+	import { provideSourceCatalog } from '#src/contexts/sourceCatalog.svelte.ts';
 	import { provideStyleHistory } from '#src/contexts/styleHistory.svelte.ts';
 	import { provideStyleVariables } from '#src/contexts/styleVariables.svelte.ts';
 	import { createEditorApi } from '#src/editor/editorApi.svelte.ts';
@@ -123,6 +124,7 @@
 	provideEditorCommands();
 	const expressionFlyout = provideExpressionFlyout();
 	const styleHistory = provideStyleHistory();
+	const sourceCatalog = provideSourceCatalog();
 	const saveProviders: SaveProvider[] = [];
 	const newStyleHandlers: NewStyleHandler[] = [];
 	const localSpriteDimensions = new SvelteMap<string, LocalSpriteDimensions>();
@@ -261,6 +263,7 @@
 		loadProject,
 		preview: { get: () => previewState, set: (preview) => (previewState = preview) },
 		styleHistory,
+		sourceCatalog,
 		saveProviders,
 		newStyleHandlers,
 		openRailItem: openAdapterRailItem,

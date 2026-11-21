@@ -3,6 +3,7 @@ import type {
 	LayerSpecification,
 	RequestParameters,
 	ResourceType,
+	SourceSpecification,
 	StyleSpecification
 } from 'maplibre-gl';
 
@@ -67,6 +68,33 @@ export type StyleHistoryProvider = {
 	loadStyleAtRevision: (revisionId: string) => Promise<StyleSpecification>;
 	/** 分割形式のみ。null はその revision にレイヤーが存在しないことを表す */
 	loadLayerAtRevision?: (revisionId: string, layerId: string) => Promise<LayerSpecification | null>;
+};
+
+/**
+ * 「ソースを追加」で選べるソースの 1 件 (アダプタが出す。例: サービスが配るタイルセット)。
+ * 種類は選んだときに決めてよい (TileJSON を読むなど、時間がかかってよい)
+ */
+export type SourceCatalogEntry = {
+	/** スタイルの sources に入れるときの ID の候補 (同じ ID があれば番号を付ける) */
+	id: string;
+	title: string;
+	description?: string;
+	/** 分かっていれば一覧に出す種類 */
+	type?: SourceSpecification['type'];
+	/** 追加するときに呼ぶ */
+	resolve: () => Promise<SourceSpecification>;
+};
+
+/**
+ * 「ソースを追加」の一覧。登録されていると、追加ではまずこの一覧を出し、URL やタイプを手で書く追加は
+ * 「Advanced」に下げる (サービスのデータを使うのが基本で、外のデータは例外のホスト向け)
+ */
+export type SourceCatalog = {
+	/** getter で実装し、リアクティブに評価できるようにする */
+	readonly available: boolean;
+	/** 一覧の見出し (例: 「cloud.map のタイルセット」) */
+	readonly label: string;
+	list: () => Promise<SourceCatalogEntry[]>;
 };
 
 export type SaveProvider = {
@@ -140,6 +168,8 @@ export type EditorApi = {
 	registerStyleHistoryProvider: (provider: StyleHistoryProvider) => void;
 	/** アダプタが保存プロバイダを登録する */
 	registerSaveProvider: (provider: SaveProvider) => void;
+	/** アダプタが「ソースを追加」の一覧を登録する */
+	registerSourceCatalog: (catalog: SourceCatalog) => void;
 	/** 新規スタイル作成時に、現在のファイル等との接続を解除するハンドラを登録する */
 	registerNewStyleHandler: (handler: NewStyleHandler) => void;
 	/** アダプタが登録した Rail 項目の SecondColumn を開く */
