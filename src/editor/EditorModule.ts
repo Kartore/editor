@@ -18,7 +18,13 @@ import type {
 
 export type * from './localDraft/types.ts';
 // アダプタが sprite アイコンの形 ({ svg, sdf? }) を複製せずに参照できるようにする
-export type { SpriteIcon, SpriteIcons } from '../stores/spriteIcons/SpriteIconsStoreAdapter.ts';
+export type {
+	SpriteIcon,
+	SpriteIconMetadata,
+	SpriteIcons,
+	SpriteStretchRange,
+	SpriteTextFit
+} from '../stores/spriteIcons/SpriteIconsStoreAdapter.ts';
 
 export type EditorPreview = {
 	style: StyleSpecification;

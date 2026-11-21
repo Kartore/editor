@@ -7,16 +7,25 @@ vi.mock('./spritore.ts', () => ({
 			id: string,
 			_svg: string,
 			pixelRatio: number,
-			options: { sdf?: boolean } = {}
+			options: { sdf?: boolean; stretchX?: [number, number][] } = {}
 		) => {
-			// spritore と同じく SDF は 3 論理 px の余白が付く
+			// spritore と同じく SDF は 3 論理 px の余白が付き、メタデータは画像ピクセルで返る
 			const size = (10 + (options.sdf ? 6 : 0)) * pixelRatio;
+			const offset = options.sdf ? 3 : 0;
 			return {
 				id,
 				width: size,
 				height: size,
 				pixels: new Uint8Array(size * size * 4),
-				sdf: options.sdf === true
+				sdf: options.sdf === true,
+				...(options.stretchX
+					? {
+							stretchX: options.stretchX.map(([a, b]) => [
+								(a + offset) * pixelRatio,
+								(b + offset) * pixelRatio
+							])
+						}
+					: {})
 			};
 		}
 	})
@@ -96,6 +105,24 @@ describe('MapSpriteSynchronizer', () => {
 		synchronizer.input = { map: map as unknown as MaplibreMap, icons: { arrow: { svg } } };
 		await vi.waitFor(() => expect(map.addImage).toHaveBeenCalledTimes(3));
 		expect(map.addImage.mock.calls[2][2]).toEqual({ pixelRatio: 2, sdf: false });
+	});
+
+	it('re-adds the image with 9-slice metadata in image pixels when it changes', async () => {
+		const map = createFakeMap();
+		const synchronizer = new MapSpriteSynchronizer(() => {});
+		synchronizer.input = { map: map as unknown as MaplibreMap, icons: { arrow: { svg } } };
+		await vi.waitFor(() => expect(map.addImage).toHaveBeenCalledTimes(1));
+
+		synchronizer.input = {
+			map: map as unknown as MaplibreMap,
+			icons: { arrow: { svg, stretchX: [[2, 8]] } }
+		};
+		await vi.waitFor(() => expect(map.addImage).toHaveBeenCalledTimes(2));
+		expect(map.addImage.mock.calls[1][2]).toEqual({
+			pixelRatio: 2,
+			sdf: false,
+			stretchX: [[4, 16]]
+		});
 	});
 
 	it('reports SVG dimensions without the SDF padding', async () => {

@@ -1,9 +1,15 @@
 import type { StyleSpecification } from 'maplibre-gl';
 
 import type { StoredFont } from '#src/stores/fonts';
-import type { SpriteIcons } from '#src/stores/spriteIcons';
+import type { SpriteIcon, SpriteIcons } from '#src/stores/spriteIcons';
 // 公開エントリ (export.ts) からも使うので、store (runes) を含む index ではなく直接読む
-import { spriteIcon } from '#src/stores/spriteIcons/spriteIconsFormat.ts';
+import {
+	hasSpriteIconSettings,
+	readSpriteIconSettings,
+	SPRITE_ICON_SETTING_KEYS,
+	spriteIcon,
+	type SpriteIconSettings
+} from '#src/stores/spriteIcons/spriteIconsFormat.ts';
 
 import { parseStyleJSON } from './styleImport.ts';
 import {
@@ -33,7 +39,7 @@ type StylePackMeta = {
  * sprites.json のエントリ。設定の無いアイコンはファイル名の文字列 (既存ファイルとバイト一致)、
  * 設定のあるアイコンだけオブジェクトにする (MapLibre の sprite index のエントリと同じく、設定をアイコンごとに持つ)
  */
-type SpriteIndexEntry = string | { file: string; sdf: true };
+type SpriteIndexEntry = string | ({ file: string } & Omit<SpriteIcon, 'svg'>);
 
 type SpriteIndex = {
 	version: 1;
@@ -207,7 +213,10 @@ export const createStyleAssetFiles = (assets: StylePackAssets): StylePackFiles =
 	for (const name of Object.keys(assets.icons).sort(compareKeys)) {
 		const icon = assets.icons[name];
 		const file = allocateSanitizedBasename(name, '.svg', spriteFiles);
-		spriteIndex.icons[name] = icon.sdf === true ? { file, sdf: true } : file;
+		// svg 以外の設定を file の後ろに並べる (sdf → stretchX → ... の順で決定的)
+		spriteIndex.icons[name] = hasSpriteIconSettings(icon)
+			? { file, ...withoutSvg(spriteIcon(icon.svg, icon)) }
+			: file;
 		files[packPath(SPRITE_DIRECTORY, file)] = icon.svg;
 	}
 	files[SPRITE_INDEX_FILE] = serializeStyleAuxiliary(spriteIndex);
@@ -252,21 +261,28 @@ const readManifest = (
 	return manifest as { formatVersion: 1; appVersion: string; createdAt: string };
 };
 
+const SPRITE_ENTRY_KEYS = new Set<string>(['file', ...SPRITE_ICON_SETTING_KEYS]);
+
+const withoutSvg = (icon: SpriteIcon): Omit<SpriteIcon, 'svg'> => {
+	const settings: Partial<SpriteIcon> = { ...icon };
+	delete settings.svg;
+	return settings;
+};
+
 /**
- * sprites.json のエントリを読む。文字列 (ファイル名だけ) か `{ file, sdf? }`。
+ * sprites.json のエントリを読む。文字列 (ファイル名だけ) か `{ file, sdf?, stretchX?, ... }`。
  * 知らないキーはエラーにする (新しい Kartore が足した設定を黙って落とさないため)
  */
-const readSpriteIndexEntry = (value: unknown): { file: string; sdf: boolean } => {
+const readSpriteIndexEntry = (value: unknown): { file: string; settings: SpriteIconSettings } => {
 	if (typeof value === 'string')
-		return { file: requireIndexFileName(value, SPRITE_INDEX_FILE), sdf: false };
-	if (
-		!isRecord(value) ||
-		Object.keys(value).some((key) => key !== 'file' && key !== 'sdf') ||
-		(value.sdf !== undefined && typeof value.sdf !== 'boolean')
-	) {
-		throw new Error('Invalid assets/sprites.json in style pack.');
+		return { file: requireIndexFileName(value, SPRITE_INDEX_FILE), settings: {} };
+	const invalid = () => new Error('Invalid assets/sprites.json in style pack.');
+	if (!isRecord(value) || Object.keys(value).some((key) => !SPRITE_ENTRY_KEYS.has(key))) {
+		throw invalid();
 	}
-	return { file: requireIndexFileName(value.file, SPRITE_INDEX_FILE), sdf: value.sdf === true };
+	const settings = readSpriteIconSettings(value);
+	if (!settings) throw invalid();
+	return { file: requireIndexFileName(value.file, SPRITE_INDEX_FILE), settings };
 };
 
 const readSpriteIndex = (
@@ -280,10 +296,10 @@ const readSpriteIndex = (
 
 	const icons: SpriteIcons = {};
 	for (const name of Object.keys(index.icons).sort(compareKeys)) {
-		const { file, sdf } = readSpriteIndexEntry(index.icons[name]);
+		const { file, settings } = readSpriteIndexEntry(index.icons[name]);
 		const path = packPath(SPRITE_DIRECTORY, file);
 		expectedPaths.add(path);
-		icons[name] = spriteIcon(readTextFile(files, path), sdf);
+		icons[name] = spriteIcon(readTextFile(files, path), settings);
 	}
 	return icons;
 };

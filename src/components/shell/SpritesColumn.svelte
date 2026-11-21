@@ -11,10 +11,17 @@
 	import { findShadowedSpriteIds } from '#src/sprites/spriteConflicts.ts';
 	import { loadSpritore } from '#src/sprites/spritore.ts';
 	import { spriteIdFromFileName, svgDataUrl } from '#src/sprites/spriteSvg.ts';
-	import { spriteIcon, type SpriteIcon, type SpriteIcons } from '#src/stores/spriteIcons';
+	import {
+		spriteIcon,
+		spriteIconRenderOptions,
+		type SpriteIcon,
+		type SpriteIcons
+	} from '#src/stores/spriteIcons';
 	import { buildSpriteFiles } from '#src/utils/styleExportArchive.ts';
 	import { spriteUsageLayerIds } from '#src/utils/assetUsage.ts';
 	import { cn } from '#src/utils/tailwindUtil.ts';
+
+	import SpriteStretchEditor from './SpriteStretchEditor.svelte';
 
 	let {
 		mapStyle,
@@ -91,9 +98,10 @@
 		try {
 			const { renderIcon } = await loadSpritore();
 			const errors: Record<string, string | undefined> = {};
-			for (const [id, { svg }] of entries) {
+			for (const [id, icon] of entries) {
 				try {
-					await renderIcon(id, svg, 1);
+					// SDF・9-slice の設定込みで描いて、範囲のはみ出しなども検証エラーとして出す
+					await renderIcon(id, icon.svg, 1, spriteIconRenderOptions(icon));
 				} catch (error) {
 					errors[id] = errorMessage(error);
 				}
@@ -122,7 +130,7 @@
 			}
 			try {
 				// 上書きしても SDF の設定は引き継ぐ
-				const icon = spriteIcon(await file.text(), nextIcons[id]?.sdf === true);
+				const icon = spriteIcon(await file.text(), nextIcons[id] ?? {});
 				onSetIcon(id, icon);
 				nextIcons[id] = icon;
 				occupiedIds.add(id);
@@ -154,9 +162,17 @@
 		onRemoveIcon(previousId);
 		selectedId = trimmed;
 	};
+	const updateSelectedIcon = (icon: SpriteIcon) => {
+		if (!selectedId || readOnly) return;
+		const id = selectedId;
+		onSetIcon(id, icon);
+		void validateIcons(
+			allIconEntries.map(([currentId, current]) => [currentId, currentId === id ? icon : current])
+		);
+	};
 	const setSelectedSdf = (sdf: boolean) => {
-		if (!selectedId || !selectedIcon || readOnly) return;
-		onSetIcon(selectedId, spriteIcon(selectedIcon.svg, sdf));
+		if (!selectedIcon) return;
+		updateSelectedIcon(spriteIcon(selectedIcon.svg, { ...selectedIcon, sdf }));
 	};
 	const confirmDelete = (id: string) => {
 		if (readOnly) return;
@@ -314,6 +330,7 @@
 								/>
 								<p class="text-ink-3">Single colour. Tint it with icon-color and icon-halo-*.</p>
 							</div>
+							<SpriteStretchEditor icon={selectedIcon} {readOnly} onChange={updateSelectedIcon} />
 							{#if validationErrors[selectedId]}
 								<p class="text-ink-2" role="alert">{validationErrors[selectedId]}</p>
 							{:else if isValidating}

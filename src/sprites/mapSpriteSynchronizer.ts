@@ -1,7 +1,8 @@
-import type { Map as MaplibreMap } from 'maplibre-gl';
+import type { Map as MaplibreMap, StyleImageMetadata } from 'maplibre-gl';
 import type { RenderedIcon } from '@kartore/spritore';
 
 import type { SpriteIcon, SpriteIcons } from '#src/stores/spriteIcons';
+import { spriteIconRenderOptions } from '#src/stores/spriteIcons/spriteIconsFormat.ts';
 
 import { loadSpritore } from './spritore.ts';
 import { spriteDimensionsFromSvg } from './spriteSvg.ts';
@@ -22,8 +23,9 @@ export type MapSpriteSyncInput = {
 	icons: SpriteIcons;
 };
 
-/** SVG と SDF の組。どちらかが変われば描き直して地図の画像を入れ直す */
-const iconKey = (icon: SpriteIcon): string => `${icon.sdf === true ? 'sdf' : 'rgba'}:${icon.svg}`;
+/** SVG と設定 (SDF・9-slice) の組。どれかが変われば描き直して地図の画像を入れ直す */
+const iconKey = (icon: SpriteIcon): string =>
+	`${JSON.stringify(spriteIconRenderOptions(icon))}:${icon.svg}`;
 
 export class MapSpriteSynchronizer {
 	#generation = 0;
@@ -92,8 +94,17 @@ export class MapSpriteSynchronizer {
 		map.addImage(
 			sprite.id,
 			{ width: sprite.width, height: sprite.height, data: sprite.pixels },
-			// SDF の画素は RGB が 0 でアルファだけが距離。フラグと画素の組を必ず揃える
-			{ pixelRatio: 2, sdf: sprite.sdf }
+			// SDF の画素は RGB が 0 でアルファだけが距離。フラグと画素の組を必ず揃える。
+			// 9-slice のメタデータは spritore が画像ピクセルに直したものをそのまま渡す
+			{
+				pixelRatio: 2,
+				sdf: sprite.sdf,
+				...(sprite.stretchX ? { stretchX: sprite.stretchX.map(([a, b]) => [a, b]) } : {}),
+				...(sprite.stretchY ? { stretchY: sprite.stretchY.map(([a, b]) => [a, b]) } : {}),
+				...(sprite.content ? { content: [...sprite.content] } : {}),
+				...(sprite.textFitWidth ? { textFitWidth: sprite.textFitWidth } : {}),
+				...(sprite.textFitHeight ? { textFitHeight: sprite.textFitHeight } : {})
+			} as Partial<StyleImageMetadata>
 		);
 		this.#addedImages.set(sprite.id, map.getImage(sprite.id));
 	}
@@ -145,7 +156,7 @@ export class MapSpriteSynchronizer {
 					const rendered =
 						cached?.key === key
 							? cached
-							: { ...(await renderIcon(id, svg, 2, { sdf: icon.sdf === true })), key };
+							: { ...(await renderIcon(id, svg, 2, spriteIconRenderOptions(icon))), key };
 					nextRenderedSprites.set(id, rendered);
 
 					// 寸法は SVG の論理サイズ (SDF の余白を含めない) なので sdf 無しで測る
@@ -202,7 +213,7 @@ export class MapSpriteSynchronizer {
 			const { renderIcon } = await loadSpritore();
 			if (!isCurrent()) return;
 			const rendered = {
-				...(await renderIcon(id, icon.svg, 2, { sdf: icon.sdf === true })),
+				...(await renderIcon(id, icon.svg, 2, spriteIconRenderOptions(icon))),
 				key
 			};
 			if (!isCurrent()) return;

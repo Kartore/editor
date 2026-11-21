@@ -2,6 +2,7 @@ import type { StyleSpecification } from 'maplibre-gl';
 
 import type { LoadedFont } from '#src/stores/fonts';
 import type { SpriteIcons } from '#src/stores/spriteIcons';
+import { spriteIconRenderOptions } from '#src/stores/spriteIcons/spriteIconsFormat.ts';
 import { buildGlyphFiles as buildGlyphFilesForFont } from '#src/fonts/glyphDownload.ts';
 import { loadGlyphore } from '#src/fonts/glyphore.ts';
 import { loadSpritore } from '#src/sprites/spritore.ts';
@@ -69,12 +70,12 @@ export const createStyleExportArchiveFiles = (
 
 /**
  * ローカルのアイコン (SVG) から sprite.json / sprite.png / sprite@2x.json / sprite@2x.png を作る。アイコンが無ければ空。
- * SDF のアイコンは index のエントリに `"sdf": true` が付く
+ * SDF のアイコンは index のエントリに `"sdf": true`、9-slice の設定は stretchX などが (画像ピクセルで) 付く
  */
 export const buildSpriteFiles = async (icons: Readonly<SpriteIcons>): Promise<StylePackFiles> => {
 	const spriteIcons = Object.entries(icons)
 		.sort(([left], [right]) => compareKeys(left, right))
-		.map(([id, icon]) => ({ id, svg: icon.svg, sdf: icon.sdf === true }));
+		.map(([id, icon]) => ({ id, svg: icon.svg, ...spriteIconRenderOptions(icon) }));
 	if (spriteIcons.length === 0) return {};
 
 	const { buildSpriteSheet } = await loadSpritore();

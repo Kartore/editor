@@ -22,12 +22,18 @@ describe('buildSpriteFiles', () => {
 	it('passes the sdf flag of each icon to spritore', async () => {
 		const files = await buildSpriteFiles({
 			pin: { svg: '<svg id="pin"/>', sdf: true },
-			arrow: { svg: '<svg id="arrow"/>' }
+			arrow: { svg: '<svg id="arrow"/>', stretchX: [[1, 2]], textFitWidth: 'proportional' }
 		});
 
 		expect(buildSpriteSheet).toHaveBeenCalledWith(
 			[
-				{ id: 'arrow', svg: '<svg id="arrow"/>', sdf: false },
+				{
+					id: 'arrow',
+					svg: '<svg id="arrow"/>',
+					sdf: false,
+					stretchX: [[1, 2]],
+					textFitWidth: 'proportional'
+				},
 				{ id: 'pin', svg: '<svg id="pin"/>', sdf: true }
 			],
 			1

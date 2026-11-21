@@ -272,6 +272,30 @@ describe('stylePack', () => {
 		});
 	});
 
+	it('writes 9-slice metadata on the entry object and reads it back', () => {
+		const icons = {
+			box: {
+				svg: '<svg id="box"/>',
+				stretchX: [[2, 8]] as [number, number][],
+				content: [2, 2, 8, 8] as [number, number, number, number],
+				textFitHeight: 'stretchOnly' as const
+			},
+			pin: { svg: '<svg id="pin"/>', sdf: true as const, stretchY: [[1, 3]] as [number, number][] }
+		};
+		const files = createStylePack(style(), { icons, fonts: {} }, META);
+
+		expect(JSON.parse(files['assets/sprites.json'] as string).icons).toEqual({
+			box: {
+				file: 'box.svg',
+				stretchX: [[2, 8]],
+				content: [2, 2, 8, 8],
+				textFitHeight: 'stretchOnly'
+			},
+			pin: { file: 'pin.svg', sdf: true, stretchY: [[1, 3]] }
+		});
+		expect(readStylePack(files).assets.icons).toEqual(icons);
+	});
+
 	it('keeps plain file names when no icon is SDF', () => {
 		const files = createStylePack(style(), assets(), META);
 		expect(JSON.parse(files['assets/sprites.json'] as string)).toEqual({
@@ -292,7 +316,9 @@ describe('stylePack', () => {
 
 	it.each([
 		['a non-boolean sdf', { file: 'marker.svg', sdf: 'yes' }],
-		['an unknown setting', { file: 'marker.svg', stretchX: [[0, 1]] }],
+		['an unknown setting', { file: 'marker.svg', pixelRatio: 2 }],
+		['a malformed stretch range', { file: 'marker.svg', stretchX: [[0]] }],
+		['an unknown textFit', { file: 'marker.svg', textFitWidth: 'stretch' }],
 		['a missing file', { sdf: true }],
 		['an array', ['marker.svg']]
 	])('rejects an entry with %s', (_label, entry) => {

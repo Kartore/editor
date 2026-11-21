@@ -44,7 +44,7 @@ export class SpriteIconsStore {
 
 	setIcon = (id: string, icon: SpriteIcon) => {
 		// 呼び出し元のオブジェクト (プロキシの可能性がある) を持ち込まず、正規形で作り直す
-		this.icons = { ...this.icons, [id]: spriteIcon(icon.svg, icon.sdf === true) };
+		this.icons = { ...this.icons, [id]: spriteIcon(icon.svg, icon) };
 		this.#onChange?.();
 		void this.#save({ ...this.icons });
 	};
