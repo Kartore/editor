@@ -45,7 +45,8 @@
 		leftShellCollapsed = false,
 		onTogglePanels,
 		onSearch,
-		onPreview
+		onPreview,
+		previewLabel
 	}: {
 		mapStyle: StyleSpecification;
 		adapterModules?: EditorModule[];
@@ -72,7 +73,9 @@
 		leftShellCollapsed?: boolean;
 		onTogglePanels?: () => void;
 		onSearch?: () => void;
+		/** 渡さなければ Preview は出さない */
 		onPreview?: () => void;
+		previewLabel?: string;
 	} = $props();
 
 	const adapterMenuSections = $derived(collectEditorMenuSections(adapterModules));
@@ -189,10 +192,13 @@
 	<nav class="flex min-w-0 items-center gap-0.5" aria-label="Editor">
 		<MenuRoot>
 			<MenuTrigger value="file" label="File">
-				<MenuItem disabled={!onNewStyle} shortcut="⌘N" onSelect={() => onNewStyle?.()}>
-					New style
-				</MenuItem>
-				<MenuItem onSelect={() => onImport?.()}>Import style…</MenuItem>
+				<!-- New style / Import style は、ホストが隠すと渡されない (EditorModule.hiddenCoreActions) -->
+				{#if onNewStyle}
+					<MenuItem shortcut="⌘N" onSelect={() => onNewStyle?.()}>New style</MenuItem>
+				{/if}
+				{#if onImport}
+					<MenuItem onSelect={() => onImport?.()}>Import style…</MenuItem>
+				{/if}
 				<MenuItem onSelect={() => onExport?.()}>Export style…</MenuItem>
 				{@render renderAdapterMenuSections('file')}
 				{#if hasHeaderActionFallbacks}
@@ -285,13 +291,15 @@
 			<ArrowUUpRight size={16} weight="regular" aria-hidden="true" />
 		</Button>
 		<span class="mx-0.5 h-[18px] w-px bg-hairline"></span>
-		<Button
-			class="h-7 rounded-[6px] px-1.5 text-[11.5px] font-normal text-[#4b4f53] hover:bg-field disabled:text-ink-4"
-			disabled={!onPreview}
-			onclick={() => onPreview?.()}
-		>
-			Preview
-		</Button>
+		{#if onPreview}
+			<Button
+				class="h-7 rounded-[6px] px-1.5 text-[11.5px] font-normal text-[#4b4f53] hover:bg-field disabled:text-ink-4"
+				title={previewLabel}
+				onclick={() => onPreview?.()}
+			>
+				Preview
+			</Button>
+		{/if}
 		<Button
 			class="h-7 rounded-[6px] bg-accent px-3 text-[11.5px] font-semibold text-white hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
 			onclick={() => onExport?.()}

@@ -7,6 +7,7 @@
 
 	import { Button } from '#src/components/common/Button';
 	import { TextField } from '#src/components/common/TextField';
+	import { useFontCatalog } from '#src/contexts/fontCatalog.svelte.ts';
 	import { buildGlyphArchive, type GlyphDownloadProgress } from '#src/fonts/glyphDownload.ts';
 	import { loadGlyphore } from '#src/fonts/glyphore.ts';
 	import { fontPreviewDescriptors, fontPreviewFamily } from '#src/fonts/fontPreview.ts';
@@ -55,6 +56,20 @@
 			.filter((name) => name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))
 			.sort((a, b) => a.localeCompare(b))
 	);
+	// アダプタが配るフォント (registerFontCatalog): 使っていれば出どころを出し、使っていないものは下に並べる
+	const fontCatalog = useFontCatalog();
+	$effect(() => fontCatalog?.load());
+	const catalogLabelOf = (fontstack: string): string | undefined =>
+		fontCatalog?.sections.find((section) => section.names.includes(fontstack))?.label;
+	const catalogSections = $derived(
+		(fontCatalog?.sections ?? []).map((section) => ({
+			...section,
+			names: section.names
+				.filter((name) => !fontstacks.includes(name))
+				.filter((name) => name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))
+				.sort((a, b) => a.localeCompare(b))
+		}))
+	);
 	const selectedMeta = $derived(selectedFontstack ? fonts[selectedFontstack] : undefined);
 	const selectedInfo = $derived(selectedFontstack ? fontInfos[selectedFontstack] : undefined);
 	const selectedStyleName = $derived(selectedInfo?.styleName ?? selectedMeta?.styleName ?? '');
@@ -76,9 +91,12 @@
 
 	const errorMessage = (error: unknown): string =>
 		error instanceof Error ? error.message : String(error);
-	const unresolved = (fontstack: string): boolean => !(fontstack in fonts) && !mapStyle.glyphs;
+	const unresolved = (fontstack: string): boolean =>
+		!(fontstack in fonts) && !mapStyle.glyphs && catalogLabelOf(fontstack) === undefined;
 	const fallbackLabel = (fontstack: string): string | undefined => {
 		if (fontstack in fonts) return undefined;
+		const catalogLabel = catalogLabelOf(fontstack);
+		if (catalogLabel) return catalogLabel;
 		return mapStyle.glyphs ? 'Fetched from glyphs URL' : 'Fallback to sans-serif';
 	};
 	const formatBytes = (bytes: number | undefined): string => {
@@ -347,7 +365,11 @@
 						{/if}
 					</span>
 					<span class="mt-0.5 block truncate text-[9.5px] text-ink-3">
-						{fontstack in fonts ? 'Local' : `Not found · ${fallbackLabel(fontstack)}`}
+						{fontstack in fonts
+							? 'Local'
+							: catalogLabelOf(fontstack)
+								? fallbackLabel(fontstack)
+								: `Not found · ${fallbackLabel(fontstack)}`}
 					</span>
 				</span>
 			</button>
@@ -425,6 +447,24 @@
 						</div>
 					{/if}
 				</div>
+			{/if}
+		{/each}
+		{#each catalogSections as section (section.label)}
+			{#if section.names.length > 0 || section.error}
+				<section class="border-t border-hairline-soft px-3 pt-2 pb-2.5" aria-label={section.label}>
+					<h3 class="text-[10px] font-semibold text-ink-2">{section.label}</h3>
+					<p class="mt-0.5 text-[9.5px] leading-[14px] text-ink-3">
+						Available without uploading. Type the name in text-font to use it.
+					</p>
+					{#if section.error}
+						<p class="mt-1 text-[10px] text-ink-2" role="alert">{section.error}</p>
+					{/if}
+					<ul class="mt-1">
+						{#each section.names as name (name)}
+							<li class="truncate py-0.5 text-[10.5px] text-ink-2" title={name}>{name}</li>
+						{/each}
+					</ul>
+				</section>
 			{/if}
 		{/each}
 		{#if operationError}
