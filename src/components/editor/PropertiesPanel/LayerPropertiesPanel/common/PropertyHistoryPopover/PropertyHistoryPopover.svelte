@@ -23,6 +23,7 @@
 		label,
 		currentValue,
 		defaultValue,
+		rowLabel,
 		onRestore
 	}: {
 		layerId: string;
@@ -31,6 +32,8 @@
 		label: string;
 		currentValue: unknown;
 		defaultValue?: unknown;
+		/** メニューの行として出すときの文字。行全体を押せるようにする */
+		rowLabel?: string;
 		onRestore: (value: unknown | undefined) => void;
 	} = $props();
 
@@ -197,9 +200,21 @@
 	<Popover.Trigger
 		aria-label={`Show history for ${label}`}
 		title={`Show history for ${label}`}
-		class="flex shrink-0 items-center justify-center rounded px-1.5 py-0.5 font-mono text-xs text-ink-3 transition-colors hover:bg-field hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent data-[state=open]:bg-accent-soft data-[state=open]:text-accent"
+		class={rowLabel === undefined
+			? 'flex shrink-0 items-center justify-center rounded px-1.5 py-0.5 font-mono text-xs text-ink-3 transition-colors hover:bg-field hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent data-[state=open]:bg-accent-soft data-[state=open]:text-accent'
+			: 'group/history-row flex h-7 w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 text-left hover:bg-field focus-visible:outline-2 focus-visible:outline-accent data-[state=open]:bg-field'}
 	>
-		<ClockCounterClockwiseIcon size={13} weight="regular" aria-hidden="true" />
+		{#if rowLabel !== undefined}
+			<span class="min-w-0 flex-1 truncate">{rowLabel}</span>
+		{/if}
+		<ClockCounterClockwiseIcon
+			size={13}
+			weight="regular"
+			aria-hidden="true"
+			class={rowLabel === undefined
+				? undefined
+				: 'shrink-0 text-ink-3 group-hover/history-row:text-accent'}
+		/>
 	</Popover.Trigger>
 	<Popover.Portal>
 		<Popover.Content
@@ -334,8 +349,10 @@
 											loading="lazy"
 										/>
 									{/if}
-									<span class="shrink-0 font-medium text-ink-2">{entry.revision.authorName}</span>
-									<span aria-hidden="true">·</span>
+									{#if entry.revision.authorName}
+										<span class="shrink-0 font-medium text-ink-2">{entry.revision.authorName}</span>
+										<span aria-hidden="true">·</span>
+									{/if}
 									<time class="shrink-0" datetime={entry.revision.authoredAt}
 										>{formatDate(entry.revision.authoredAt)}</time
 									>
