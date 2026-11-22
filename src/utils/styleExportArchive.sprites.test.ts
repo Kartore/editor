@@ -1,16 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
 
-const buildSpriteSheet = vi.fn(
-	async (icons: { id: string; svg: string; sdf?: boolean }[], pixelRatio: number) => ({
-		png: Uint8Array.from([pixelRatio]),
-		indexJson: JSON.stringify(
-			Object.fromEntries(
-				icons.map(({ id, sdf }) => [id, sdf ? { pixelRatio, sdf } : { pixelRatio }])
-			)
-		),
-		index: {}
-	})
-);
+type SpriteIcon = { id: string; svg: string; sdf?: boolean };
+type BuildSpriteSheet = (
+	icons: SpriteIcon[],
+	pixelRatio: number,
+	options?: { fast?: boolean }
+) => Promise<{ png: Uint8Array; indexJson: string; index: object }>;
+
+const buildSpriteSheet = vi.fn<BuildSpriteSheet>(async (icons, pixelRatio) => ({
+	png: Uint8Array.from([pixelRatio]),
+	indexJson: JSON.stringify(
+		Object.fromEntries(icons.map(({ id, sdf }) => [id, sdf ? { pixelRatio, sdf } : { pixelRatio }]))
+	),
+	index: {}
+}));
 
 vi.mock('#src/sprites/spritore.ts', () => ({
 	loadSpritore: async () => ({ buildSpriteSheet })
@@ -19,7 +22,7 @@ vi.mock('#src/sprites/spritore.ts', () => ({
 const { buildSpriteFiles } = await import('./styleExportArchive.ts');
 
 describe('buildSpriteFiles', () => {
-	it('passes the sdf flag of each icon to spritore', async () => {
+	it('passes the sdf flag of each icon to spritore, and builds fast', async () => {
 		const files = await buildSpriteFiles({
 			pin: { svg: '<svg id="pin"/>', sdf: true },
 			arrow: { svg: '<svg id="arrow"/>', stretchX: [[1, 2]], textFitWidth: 'proportional' }
@@ -36,7 +39,8 @@ describe('buildSpriteFiles', () => {
 				},
 				{ id: 'pin', svg: '<svg id="pin"/>', sdf: true }
 			],
-			1
+			1,
+			{ fast: true }
 		);
 		expect(JSON.parse(files['sprite@2x.json'] as string)).toEqual({
 			arrow: { pixelRatio: 2 },

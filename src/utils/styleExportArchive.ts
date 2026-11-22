@@ -19,6 +19,7 @@ const SPRITE_DIRECTORY = 'sprite';
 const SPRITE_URL = `${SPRITE_DIRECTORY}/sprite`;
 const GLYPH_DIRECTORY = 'glyphs';
 const GLYPH_URL_TEMPLATE = `${GLYPH_DIRECTORY}/{fontstack}/{range}.pbf`;
+const SPRITE_BUILD_OPTIONS = { fast: true } as const;
 
 const compareKeys = (left: string, right: string): number =>
 	left < right ? -1 : left > right ? 1 : 0;
@@ -79,9 +80,12 @@ export const buildSpriteFiles = async (icons: Readonly<SpriteIcons>): Promise<St
 	if (spriteIcons.length === 0) return {};
 
 	const { buildSpriteSheet } = await loadSpritore();
+	// fast: spritore は既定で PNG を小さくするのに時間をかけ、ブラウザの同じスレッドで動くので、
+	// その間エディタが固まる (公式スタイルのアイコン 128 個で 1x と 2x を合わせて 20 秒ほど)。
+	// fast なら 1 秒かからず、PNG は 1 割ほど大きくなるだけ。出力は fast でも決まっている (同じ入力なら同じ PNG)
 	const [oneX, twoX] = await Promise.all([
-		buildSpriteSheet(spriteIcons, 1),
-		buildSpriteSheet(spriteIcons, 2)
+		buildSpriteSheet(spriteIcons, 1, SPRITE_BUILD_OPTIONS),
+		buildSpriteSheet(spriteIcons, 2, SPRITE_BUILD_OPTIONS)
 	]);
 	return {
 		'sprite.json': oneX.indexJson,
