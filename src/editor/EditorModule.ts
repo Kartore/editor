@@ -3,6 +3,7 @@ import type {
 	LayerSpecification,
 	RequestParameters,
 	ResourceType,
+	SourceSpecification,
 	StyleSpecification
 } from 'maplibre-gl';
 
@@ -68,6 +69,88 @@ export type StyleHistoryProvider = {
 	/** 分割形式のみ。null はその revision にレイヤーが存在しないことを表す */
 	loadLayerAtRevision?: (revisionId: string, layerId: string) => Promise<LayerSpecification | null>;
 };
+
+/**
+ * 「ソースを追加」で選べるソースの 1 件 (アダプタが出す。例: サービスが配るタイルセット)。
+ * 種類は選んだときに決めてよい (TileJSON を読むなど、時間がかかってよい)
+ */
+export type SourceCatalogEntry = {
+	/** スタイルの sources に入れるときの ID の候補 (同じ ID があれば番号を付ける) */
+	id: string;
+	title: string;
+	description?: string;
+	/** 分かっていれば一覧に出す種類 */
+	type?: SourceSpecification['type'];
+	/** 追加するときに呼ぶ */
+	resolve: () => Promise<SourceSpecification>;
+};
+
+/**
+ * 「ソースを追加」の一覧。登録されていると、追加ではまずこの一覧を出し、URL やタイプを手で書く追加は
+ * 「Advanced」に下げる (サービスのデータを使うのが基本で、外のデータは例外のホスト向け)
+ */
+export type SourceCatalog = {
+	/** getter で実装し、リアクティブに評価できるようにする */
+	readonly available: boolean;
+	/** 一覧の見出し (例: 「cloud.map のタイルセット」) */
+	readonly label: string;
+	list: () => Promise<SourceCatalogEntry[]>;
+};
+
+/**
+ * トップバーの Preview を受け持つ (例: 保存した版を、使う人が見るのと同じ形でサービスの地図に開く)。
+ * 登録されていなければ Preview は出さない
+ */
+export type PreviewProvider = {
+	/** getter で実装し、リアクティブに評価できるようにする */
+	readonly available: boolean;
+	/** ボタンの説明 (title) */
+	readonly label?: string;
+	preview: () => void | Promise<void>;
+};
+
+/**
+ * 書き出しを受け持つ。available なら Export (トップバーのボタンと File メニュー) でコアのダイアログの代わりに
+ * open を呼ぶ (アダプタがダイアログを出す)。コアの書き出し (style.json / ZIP) は EditorApi.openStyleExportDialog で開ける
+ */
+export type ExportProvider = {
+	/** getter で実装し、リアクティブに評価できるようにする */
+	readonly available: boolean;
+	open: () => void;
+};
+
+/** text-font の候補に足すフォント (サービスが配っていて、アップロードしなくても使えるフォント) */
+export type FontCatalog = {
+	/** getter で実装し、リアクティブに評価できるようにする */
+	readonly available: boolean;
+	/** 一覧の見出し (例: 「cloud.map のフォント」) */
+	readonly label: string;
+	/** fontstack の名前 (text-font に書く名前) */
+	list: () => Promise<string[]>;
+};
+
+/** 新しいスタイルの雛形の 1 件 (例: 公式スタイル) */
+export type StyleTemplate = {
+	id: string;
+	title: string;
+	description?: string;
+	/** 一覧に出す画像 (https URL) */
+	thumbnailUrl?: string;
+	/** 選んだときに呼ぶ。アイコンとフォントも入れると、それで置き換える */
+	load: () => Promise<EditorProject>;
+};
+
+/** 新しいスタイルの雛形の一覧。登録されていると、New style で空のスタイルと雛形から選ぶダイアログを出す */
+export type StyleTemplateCatalog = {
+	/** getter で実装し、リアクティブに評価できるようにする */
+	readonly available: boolean;
+	/** 一覧の見出し (例: 「この組織のスタイル」) */
+	readonly label: string;
+	list: () => Promise<StyleTemplate[]>;
+};
+
+/** EditorModule.hiddenCoreActions で隠せる本体の操作 */
+export type EditorCoreAction = 'new-style' | 'import-style';
 
 export type SaveProvider = {
 	/** getter で実装し、リアクティブに評価できるようにする */
@@ -140,6 +223,20 @@ export type EditorApi = {
 	registerStyleHistoryProvider: (provider: StyleHistoryProvider) => void;
 	/** アダプタが保存プロバイダを登録する */
 	registerSaveProvider: (provider: SaveProvider) => void;
+	/** アダプタが「ソースを追加」の一覧を登録する */
+	registerSourceCatalog: (catalog: SourceCatalog) => void;
+	/** アダプタが Preview を受け持つ (最後に登録した available なものを使う) */
+	registerPreviewProvider: (provider: PreviewProvider) => void;
+	/** アダプタが書き出しを受け持つ (最後に登録した available なものを使う) */
+	registerExportProvider: (provider: ExportProvider) => void;
+	/** アダプタが text-font の候補に足すフォントを登録する */
+	registerFontCatalog: (catalog: FontCatalog) => void;
+	/** アダプタが新しいスタイルの雛形を登録する */
+	registerStyleTemplates: (catalog: StyleTemplateCatalog) => void;
+	/** コアの書き出しダイアログ (style.json / ZIP) を開く。ExportProvider のダイアログから「そのまま書き出す」に使う */
+	openStyleExportDialog: () => void;
+	/** New style を始める (雛形があれば選ぶダイアログを出す)。中身が空のスタイルを開いたときなどに使う */
+	openNewStyle: () => void;
 	/** 新規スタイル作成時に、現在のファイル等との接続を解除するハンドラを登録する */
 	registerNewStyleHandler: (handler: NewStyleHandler) => void;
 	/** アダプタが登録した Rail 項目の SecondColumn を開く */
@@ -227,6 +324,11 @@ export type EditorModule = {
 	menuSections?: Partial<Record<EditorMenuId, Component>>;
 	/** トップバーのファイル名表示領域に並ぶ小さな状態表示 */
 	headerStatus?: Component;
+	/**
+	 * 本体の操作のうち出さないもの (File メニューとショートカット)。開くスタイルがホストで決まっていて、
+	 * 新しく作る・読み込むがかえって紛らわしいときに使う。代わりの操作は menuSections で足す
+	 */
+	hiddenCoreActions?: EditorCoreAction[];
 	/** +page.svelte 直下にマウントされるダイアログ・オーバーレイ */
 	overlays?: Component[];
 	/** Rail と SecondColumn に追加する adapter 固有の編集モード */

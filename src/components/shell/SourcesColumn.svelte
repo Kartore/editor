@@ -6,6 +6,8 @@
 	import { Select } from '#src/components/common/Select';
 	import { TextField } from '#src/components/common/TextField';
 	import { createSourceLayers } from '#src/components/editor/PropertiesPanel/LayerPropertiesPanel/hooks/useSourceLayers/useSourceLayers.svelte.ts';
+	import { useSourceCatalog } from '#src/contexts/sourceCatalog.svelte.ts';
+	import type { SourceCatalogEntry } from '#src/editor/EditorModule.ts';
 	import { isVectorSource } from '#src/components/editor/PropertiesPanel/LayerPropertiesPanel/utils/SourceUtil/SourceUtil.ts';
 	import { validateMapStyle } from '#src/utils/styleValidation.ts';
 	import { cn } from '#src/utils/tailwindUtil.ts';
@@ -61,6 +63,68 @@
 	let editError = $state<string>();
 	let editWarnings = $state<string[]>([]);
 	let editingSource = $state(false);
+
+	// アダプタの「ソースを追加」の一覧 (registerSourceCatalog)。あれば追加はそこから選ぶのが基本で、
+	// URL・タイプを手で書く追加は「Advanced」に下げる
+	const sourceCatalog = useSourceCatalog();
+	const catalogs = $derived(sourceCatalog?.catalogs ?? []);
+	let catalogEntries = $state<{ label: string; entries: SourceCatalogEntry[] }[]>([]);
+	let catalogLoading = $state(false);
+	let catalogError = $state<string>();
+	let addingEntry = $state<string>();
+	let advanced = $state(false);
+
+	const loadCatalogs = async () => {
+		catalogLoading = true;
+		catalogError = undefined;
+		try {
+			catalogEntries = await Promise.all(
+				catalogs.map(async (catalog) => ({ label: catalog.label, entries: await catalog.list() }))
+			);
+		} catch (error) {
+			catalogError = error instanceof Error ? error.message : String(error);
+		} finally {
+			catalogLoading = false;
+		}
+	};
+	// 検索欄は一覧の絞り込みにも効く (タイトルか ID)
+	const matchesSearch = (entry: SourceCatalogEntry): boolean => {
+		const query = search.trim().toLocaleLowerCase();
+		return (
+			query === '' ||
+			entry.title.toLocaleLowerCase().includes(query) ||
+			entry.id.toLocaleLowerCase().includes(query)
+		);
+	};
+	const toggleAdding = () => {
+		adding = !adding;
+		advanced = false;
+		if (adding && catalogs.length > 0) void loadCatalogs();
+	};
+	/** `id`, or `id-2`, `id-3`… when the style has a source with that ID */
+	const freeSourceId = (id: string): string => {
+		if (!(id in mapStyle.sources)) return id;
+		let index = 2;
+		while (`${id}-${index}` in mapStyle.sources) index += 1;
+		return `${id}-${index}`;
+	};
+	const addCatalogEntry = async (entry: SourceCatalogEntry) => {
+		if (readOnly || addingEntry) return;
+		addingEntry = entry.id;
+		catalogError = undefined;
+		try {
+			const source = await entry.resolve();
+			const sourceId = freeSourceId(entry.id);
+			onApply(candidateWithSource(sourceId, source));
+			selectedSourceId = sourceId;
+			editValue = sourceJSON(source);
+			adding = false;
+		} catch (error) {
+			catalogError = error instanceof Error ? error.message : String(error);
+		} finally {
+			addingEntry = undefined;
+		}
+	};
 
 	const sourceEntries = $derived(
 		Object.entries(mapStyle.sources)
@@ -183,7 +247,7 @@
 			aria-label="Add source"
 			title="Add source"
 			disabled={readOnly}
-			onclick={() => (adding = !adding)}
+			onclick={toggleAdding}
 		>
 			<Plus size={16} weight="regular" aria-hidden="true" />
 		</Button>
@@ -211,7 +275,50 @@
 	</div>
 
 	<div class="min-h-0 flex-1 overflow-y-auto">
-		{#if adding}
+		{#if adding && catalogs.length > 0}
+			<div class="flex flex-col gap-1 border-b border-hairline-soft px-1.5 py-2">
+				{#if catalogError}
+					<p class="px-1.5 text-[10px] text-ink-2" role="alert">{catalogError}</p>
+				{/if}
+				{#if catalogLoading}
+					<p class="px-1.5 text-[10.5px] text-ink-3">Loading…</p>
+				{/if}
+				<div class="flex max-h-72 flex-col gap-1 overflow-y-auto">
+					{#each catalogEntries as group (group.label)}
+						{@const entries = group.entries.filter(matchesSearch)}
+						<p class="px-1.5 pt-1 text-[10px] font-semibold text-ink-3">{group.label}</p>
+						{#if entries.length === 0}
+							<p class="px-1.5 text-[10.5px] text-ink-3">Nothing to add.</p>
+						{/if}
+						{#each entries as entry (entry.id)}
+							<button
+								type="button"
+								class="flex w-full flex-col rounded-[5px] px-1.5 py-1 text-left hover:bg-field disabled:text-ink-4"
+								disabled={readOnly || addingEntry !== undefined}
+								title={entry.description}
+								onclick={() => void addCatalogEntry(entry)}
+							>
+								<span class="truncate text-[11px] text-ink-1">{entry.title}</span>
+								<span class="truncate font-mono text-[9.5px] text-ink-3">
+									{entry.id}{entry.type ? ` · ${entry.type}` : ''}{addingEntry === entry.id
+										? ' · Adding…'
+										: ''}
+								</span>
+							</button>
+						{/each}
+					{/each}
+				</div>
+				<Button
+					class="mt-1 h-5 justify-start px-1.5 text-[10px] font-semibold text-ink-3 hover:bg-transparent hover:text-ink-1"
+					aria-expanded={advanced}
+					onclick={() => (advanced = !advanced)}
+				>
+					{advanced ? 'Hide advanced' : 'Advanced: add by URL or type'}
+				</Button>
+			</div>
+		{/if}
+
+		{#if adding && (catalogs.length === 0 || advanced)}
 			<div class="flex flex-col gap-2 border-b border-hairline-soft px-3 py-2">
 				<TextField
 					class="[&>input]:w-full"

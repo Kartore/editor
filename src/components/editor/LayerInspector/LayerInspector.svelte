@@ -24,6 +24,7 @@
 	} from '#src/components/common/FilterQueryBuilder';
 	import type { LayerValidationError } from '#src/utils/styleValidation.ts';
 	import { getLayerGroup } from '#src/utils/layerGroup.ts';
+	import { useFontCatalog } from '#src/contexts/fontCatalog.svelte.ts';
 	import { referencedFontStacks } from '#src/utils/assetUsage.ts';
 	import { cn } from '#src/utils/tailwindUtil.ts';
 
@@ -104,10 +105,19 @@
 		return `${layer.type} ・ ${layer.source}${sourceLayer ? ` / ${sourceLayer}` : ''}`;
 	});
 	const layerGroup = $derived(getLayerGroup(layer));
+	// アダプタが配るフォント (registerFontCatalog) も候補に出す
+	const fontCatalog = useFontCatalog();
+	$effect(() => {
+		if (layer.type === 'symbol') fontCatalog?.load();
+	});
 	const fontSuggestions = $derived(
-		[...new Set([...fontNames, ...referencedFontStacks(mapStyle)])].sort((a, b) =>
-			a.localeCompare(b)
-		)
+		[
+			...new Set([
+				...fontNames,
+				...referencedFontStacks(mapStyle),
+				...(fontCatalog?.fontNames ?? [])
+			])
+		].sort((a, b) => a.localeCompare(b))
 	);
 </script>
 

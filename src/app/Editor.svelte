@@ -8,6 +8,7 @@
 	import { DraftRecoveryDialog } from '#src/components/editor/DraftRecoveryDialog';
 	import ExportStyleDialog from '#src/components/editor/ExportStyleDialog/ExportStyleDialog.svelte';
 	import { ImportStyleDialog } from '#src/components/editor/ImportStyleDialog';
+	import { NewStyleDialog } from '#src/components/editor/NewStyleDialog';
 	import {
 		InspectSession,
 		type InspectedFeature,
@@ -43,18 +44,26 @@
 	import { provideBackgroundMap } from '#src/contexts/backgroundMap.svelte.ts';
 	import { provideEditorCommands } from '#src/contexts/editorCommands.svelte.ts';
 	import { provideExpressionFlyout } from '#src/contexts/expressionFlyout.svelte.ts';
+	import { provideFontCatalog } from '#src/contexts/fontCatalog.svelte.ts';
 	import { provideRequestTransform } from '#src/contexts/requestTransform.ts';
+	import { provideSourceCatalog } from '#src/contexts/sourceCatalog.svelte.ts';
 	import { provideStyleHistory } from '#src/contexts/styleHistory.svelte.ts';
 	import { provideStyleVariables } from '#src/contexts/styleVariables.svelte.ts';
 	import { createEditorApi } from '#src/editor/editorApi.svelte.ts';
 	import { EditorDocument } from '#src/editor/editorDocument.svelte.ts';
 	import type {
+		EditorCoreAction,
 		EditorPreview,
 		EditorProject,
+		ExportProvider,
 		NewStyleHandler,
-		SaveProvider
+		PreviewProvider,
+		SaveProvider,
+		StyleTemplate,
+		StyleTemplateCatalog
 	} from '#src/editor/EditorModule.ts';
 	import { collectEditorRailItems } from '#src/editor/editorRail.ts';
+	import { HostProviders } from '#src/editor/hostProviders.svelte.ts';
 	import type { EditorStorage } from '#src/editor/localDraft/types.ts';
 	import { createRequestTransformerRegistry } from '#src/editor/requestTransform.ts';
 	import { dispatchSave } from '#src/editor/saveProvider.ts';
@@ -123,6 +132,15 @@
 	provideEditorCommands();
 	const expressionFlyout = provideExpressionFlyout();
 	const styleHistory = provideStyleHistory();
+	const sourceCatalog = provideSourceCatalog();
+	const fontCatalog = provideFontCatalog();
+	const previewProviders = new HostProviders<PreviewProvider>();
+	const exportProviders = new HostProviders<ExportProvider>();
+	const styleTemplates = new HostProviders<StyleTemplateCatalog>();
+	// アダプタが出さないとした本体の操作 (EditorModule.hiddenCoreActions)
+	const hiddenCoreActions = new Set<EditorCoreAction>(
+		adapterModules.flatMap((module) => module.hiddenCoreActions ?? [])
+	);
 	const saveProviders: SaveProvider[] = [];
 	const newStyleHandlers: NewStyleHandler[] = [];
 	const localSpriteDimensions = new SvelteMap<string, LocalSpriteDimensions>();
@@ -155,6 +173,7 @@
 	let layerDragActive = $state(false);
 	let importDialogOpen = $state(false);
 	let exportDialogOpen = $state(false);
+	let newStyleDialogOpen = $state(false);
 	let addLayerPopoverOpen = $state(false);
 	let styleJsonMode = $state(false);
 	let activeLayerTab = $state<LayerInspectorTab>('design');
@@ -261,6 +280,13 @@
 		loadProject,
 		preview: { get: () => previewState, set: (preview) => (previewState = preview) },
 		styleHistory,
+		sourceCatalog,
+		fontCatalog,
+		previewProviders,
+		exportProviders,
+		styleTemplates,
+		openStyleExportDialog: () => (exportDialogOpen = true),
+		openNewStyle: () => handleOpenNewStyle(),
 		saveProviders,
 		newStyleHandlers,
 		openRailItem: openAdapterRailItem,
@@ -332,7 +358,8 @@
 		store.setMapStyle(normalizeStyleVariables(style));
 	};
 
-	const handleNewStyle = () => {
+	/** 新しいスタイルを始める前に、開いているスタイルに結びついた画面の状態を戻す */
+	const resetForNewStyle = () => {
 		inspect.end();
 		previewState = null;
 		store.cancelStyleTransient();
@@ -344,8 +371,33 @@
 		styleJsonMode = false;
 		addLayerPopoverOpen = false;
 		selectedLayerId = null;
+	};
+
+	const handleNewStyle = () => {
+		resetForNewStyle();
 		store.setMapStyle(createEmptyStyle());
 	};
+
+	const handleNewStyleFromTemplate = async (template: StyleTemplate) => {
+		const project = await template.load();
+		resetForNewStyle();
+		await loadProject(project);
+	};
+
+	/** New style: 雛形があれば選ぶダイアログを出し、無ければ空のスタイルにする */
+	const handleOpenNewStyle = () => {
+		if (styleTemplates.available.length > 0) newStyleDialogOpen = true;
+		else handleNewStyle();
+	};
+
+	/** Export: アダプタが受け持つならそのダイアログ、そうでなければコアのダイアログ */
+	const handleOpenExport = () => {
+		const provider = exportProviders.current;
+		if (provider) provider.open();
+		else exportDialogOpen = true;
+	};
+
+	const previewProvider = $derived(previewProviders.current);
 
 	const handleApplyStyle = (style: StyleSpecification) => {
 		if (previewState) return;
@@ -543,13 +595,20 @@
 			{
 				colorVisionActive: colorVisionMode !== 'none',
 				inspectActive: inspect.active,
-				blocked: importDialogOpen || exportDialogOpen || addLayerPopoverOpen || layerDragActive,
+				blocked:
+					importDialogOpen ||
+					exportDialogOpen ||
+					newStyleDialogOpen ||
+					addLayerPopoverOpen ||
+					layerDragActive,
 				activeShellMode,
 				historyAvailable: styleHistory.provider?.available ?? false,
 				leftShellCollapsed: shell.leftCollapsed
 			},
 			{
-				newStyle: handleNewStyle,
+				newStyle: () => {
+					if (!hiddenCoreActions.has('new-style')) handleOpenNewStyle();
+				},
 				save: handleSave,
 				openCommandPalette: () => (commandPaletteOpen = true),
 				exitColorVision: () => (colorVisionMode = 'none'),
@@ -642,9 +701,11 @@
 			canRedo={!previewState && store.canRedo}
 			onUndo={() => store.undo()}
 			onRedo={() => store.redo()}
-			onNewStyle={handleNewStyle}
-			onImport={() => (importDialogOpen = true)}
-			onExport={() => (exportDialogOpen = true)}
+			onNewStyle={hiddenCoreActions.has('new-style') ? undefined : handleOpenNewStyle}
+			onImport={hiddenCoreActions.has('import-style') ? undefined : () => (importDialogOpen = true)}
+			onExport={handleOpenExport}
+			onPreview={previewProvider ? () => void previewProvider.preview() : undefined}
+			previewLabel={previewProvider?.label}
 			onRenameStyle={previewState ? undefined : handleRenameStyle}
 			onAddLayer={handleOpenAddLayer}
 			onGroupLayersByPrefix={previewState ? undefined : handleGroupLayersByPrefix}
@@ -882,6 +943,12 @@
 		/>
 
 		<ImportStyleDialog bind:open={importDialogOpen} onImport={handleImport} />
+		<NewStyleDialog
+			bind:open={newStyleDialogOpen}
+			catalogs={styleTemplates.available}
+			onBlank={handleNewStyle}
+			onTemplate={handleNewStyleFromTemplate}
+		/>
 		<ExportStyleDialog
 			bind:open={exportDialogOpen}
 			style={store.mapStyle}

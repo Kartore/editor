@@ -1,14 +1,21 @@
+import type { SourceCatalogContext } from '#src/contexts/sourceCatalog.svelte.ts';
 import type { StyleHistoryContext } from '#src/contexts/styleHistory.svelte.ts';
+
+import type { FontCatalogContext } from '#src/contexts/fontCatalog.svelte.ts';
 
 import type {
 	EditorApi,
 	EditorPreview,
 	EditorProject,
+	ExportProvider,
 	LocalDraftMeta,
 	NewStyleHandler,
-	SaveProvider
+	PreviewProvider,
+	SaveProvider,
+	StyleTemplateCatalog
 } from './EditorModule.ts';
 import type { EditorDocument } from './editorDocument.svelte.ts';
+import type { HostProviders } from './hostProviders.svelte.ts';
 import type { RequestTransformerRegistry } from './requestTransform.ts';
 
 export type EditorApiDependencies = {
@@ -18,6 +25,13 @@ export type EditorApiDependencies = {
 	loadProject: (project: EditorProject) => Promise<void>;
 	preview: { get: () => EditorPreview | null; set: (preview: EditorPreview | null) => void };
 	styleHistory: Pick<StyleHistoryContext, 'register'>;
+	sourceCatalog: Pick<SourceCatalogContext, 'register'>;
+	fontCatalog: Pick<FontCatalogContext, 'register'>;
+	previewProviders: Pick<HostProviders<PreviewProvider>, 'register'>;
+	exportProviders: Pick<HostProviders<ExportProvider>, 'register'>;
+	styleTemplates: Pick<HostProviders<StyleTemplateCatalog>, 'register'>;
+	openStyleExportDialog: () => void;
+	openNewStyle: () => void;
 	saveProviders: SaveProvider[];
 	newStyleHandlers: NewStyleHandler[];
 	openRailItem: EditorApi['openRailItem'];
@@ -31,6 +45,13 @@ export const createEditorApi = ({
 	loadProject,
 	preview,
 	styleHistory,
+	sourceCatalog,
+	fontCatalog,
+	previewProviders,
+	exportProviders,
+	styleTemplates,
+	openStyleExportDialog,
+	openNewStyle,
 	saveProviders,
 	newStyleHandlers,
 	openRailItem,
@@ -53,6 +74,13 @@ export const createEditorApi = ({
 		getPreview: preview.get,
 		registerStyleHistoryProvider: (provider) => styleHistory.register(provider),
 		registerSaveProvider: (provider) => saveProviders.push(provider),
+		registerSourceCatalog: (catalog) => sourceCatalog.register(catalog),
+		registerPreviewProvider: (provider) => previewProviders.register(provider),
+		registerExportProvider: (provider) => exportProviders.register(provider),
+		registerFontCatalog: (catalog) => fontCatalog.register(catalog),
+		registerStyleTemplates: (catalog) => styleTemplates.register(catalog),
+		openStyleExportDialog,
+		openNewStyle,
 		registerNewStyleHandler: (handler) => newStyleHandlers.push(handler),
 		openRailItem,
 		getDraftScope: () => localDraft.scope,
