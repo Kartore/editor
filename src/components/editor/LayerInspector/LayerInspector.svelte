@@ -10,7 +10,7 @@
 		SpriteSpecification,
 		StyleSpecification
 	} from '@maplibre/maplibre-gl-style-spec';
-	import { ClockCounterClockwise, Copy, DotsThree, Trash } from 'phosphor-svelte';
+	import { Copy, DotsThree, Trash } from 'phosphor-svelte';
 
 	import { Button } from '#src/components/common/Button';
 	import { RowPopover } from '#src/components/common/RowPopover';
@@ -25,11 +25,13 @@
 	import type { LayerValidationError } from '#src/utils/styleValidation.ts';
 	import { getLayerGroup } from '#src/utils/layerGroup.ts';
 	import { useFontCatalog } from '#src/contexts/fontCatalog.svelte.ts';
+	import { useStyleHistory } from '#src/contexts/styleHistory.svelte.ts';
 	import { referencedFontStacks } from '#src/utils/assetUsage.ts';
 	import { cn } from '#src/utils/tailwindUtil.ts';
 
 	import LayerDataPanel from './LayerDataPanel.svelte';
 	import LayerFilterPanel from './LayerFilterPanel.svelte';
+	import LayerHistoryPopover from './LayerHistoryPopover.svelte';
 	import LayerJsonPanel from './LayerJsonPanel.svelte';
 
 	let {
@@ -105,6 +107,9 @@
 		return `${layer.type} ・ ${layer.source}${sourceLayer ? ` / ${sourceLayer}` : ''}`;
 	});
 	const layerGroup = $derived(getLayerGroup(layer));
+	// 履歴を出せるアダプタ (registerStyleHistoryProvider) があるときだけ、レイヤーの履歴を出す
+	const styleHistory = useStyleHistory();
+	const canShowHistory = $derived(styleHistory?.provider != null);
 	// アダプタが配るフォント (registerFontCatalog) も候補に出す
 	const fontCatalog = useFontCatalog();
 	$effect(() => {
@@ -136,13 +141,13 @@
 			{/if}
 		</div>
 		<div class="flex shrink-0 items-center gap-0.5">
-			<Button
-				class="flex size-6 items-center justify-center rounded-[5px] text-ink-3 hover:bg-field hover:text-ink-1"
-				aria-label="Layer history"
-				title="Layer history"
-			>
-				<ClockCounterClockwise size={16} weight="regular" aria-hidden="true" />
-			</Button>
+			{#if canShowHistory}
+				<LayerHistoryPopover
+					{layer}
+					{readOnly}
+					onRestore={(restored) => onApplyLayer(restored, layer.id)}
+				/>
+			{/if}
 			<RowPopover
 				aria-label="Layer actions"
 				triggerClass="flex size-6 items-center justify-center rounded-[5px] text-ink-3 hover:bg-field hover:text-ink-1"

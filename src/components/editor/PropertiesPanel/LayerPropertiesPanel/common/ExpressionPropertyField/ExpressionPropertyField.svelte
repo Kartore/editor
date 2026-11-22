@@ -250,32 +250,28 @@
 						</div>
 						<div class="flex flex-col p-1">
 							{#if canShowHistory && layerId !== undefined && propertyKey !== undefined}
-								<div class="flex h-7 items-center rounded-[6px] px-2 hover:bg-field">
-									<span class="min-w-0 flex-1 truncate">History</span>
-									<PropertyHistoryPopover
-										{layerId}
-										group={propertyGroup}
-										key={propertyKey}
-										{label}
-										currentValue={value}
-										defaultValue={styleDefaultValue}
-										onRestore={(restoredValue) => onChange?.(restoredValue)}
-									/>
-								</div>
+								<PropertyHistoryPopover
+									{layerId}
+									group={propertyGroup}
+									key={propertyKey}
+									{label}
+									currentValue={value}
+									defaultValue={styleDefaultValue}
+									rowLabel="History"
+									onRestore={(restoredValue) => onChange?.(restoredValue)}
+								/>
 							{/if}
 							{#if !isExpression(value) && literalBinding === undefined}
 								{#if canBindLiteral && bindableType !== undefined}
-									<div class="flex h-7 items-center rounded-[6px] px-2 hover:bg-field">
-										<span class="min-w-0 flex-1 truncate">Style variable</span>
-										<VariablePickerPopover
-											type={bindableType}
-											currentValue={literalVariableSeed}
-											onPick={bindLiteral}
-											onCreateFromValue={canCreateVariableFromLiteral
-												? createAndBindLiteral
-												: undefined}
-										/>
-									</div>
+									<VariablePickerPopover
+										type={bindableType}
+										currentValue={literalVariableSeed}
+										onPick={bindLiteral}
+										onCreateFromValue={canCreateVariableFromLiteral
+											? createAndBindLiteral
+											: undefined}
+										rowLabel="Style variable"
+									/>
 								{/if}
 								{#if rampable}
 									<Button

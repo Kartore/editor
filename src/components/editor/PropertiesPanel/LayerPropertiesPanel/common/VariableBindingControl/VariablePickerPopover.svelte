@@ -11,12 +11,15 @@
 		type,
 		currentValue,
 		onPick,
-		onCreateFromValue
+		onCreateFromValue,
+		rowLabel
 	}: {
 		type: StyleVariableType;
 		currentValue: unknown;
 		onPick: (variableId: string) => void;
 		onCreateFromValue?: () => void;
+		/** メニューの行として出すときの文字。行全体を押せるようにする */
+		rowLabel?: string;
 	} = $props();
 
 	const context = useStyleVariables();
@@ -43,10 +46,22 @@
 
 <RowPopover
 	aria-label={`Reference ${typeLabel.toLowerCase()} style variable`}
-	triggerClass="flex size-6 items-center justify-center rounded-[6px] text-ink-3 hover:bg-field hover:text-accent focus-visible:outline-2 focus-visible:outline-accent aria-expanded:bg-accent-soft aria-expanded:text-accent"
+	triggerClass={rowLabel === undefined
+		? 'flex size-6 items-center justify-center rounded-[6px] text-ink-3 hover:bg-field hover:text-accent focus-visible:outline-2 focus-visible:outline-accent aria-expanded:bg-accent-soft aria-expanded:text-accent'
+		: 'group/variable-row flex h-7 w-full items-center gap-2 rounded-[6px] px-2 text-left hover:bg-field focus-visible:outline-2 focus-visible:outline-accent aria-expanded:bg-field'}
 >
 	{#snippet trigger()}
-		<Diamond size={14} weight="regular" aria-hidden="true" />
+		{#if rowLabel !== undefined}
+			<span class="min-w-0 flex-1 truncate">{rowLabel}</span>
+		{/if}
+		<Diamond
+			size={14}
+			weight="regular"
+			aria-hidden="true"
+			class={rowLabel === undefined
+				? undefined
+				: 'shrink-0 text-ink-3 group-hover/variable-row:text-accent'}
+		/>
 	{/snippet}
 
 	{#snippet children({ close })}
